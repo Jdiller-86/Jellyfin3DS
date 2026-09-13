@@ -1,0 +1,32 @@
+name: Build 3DS homebrew
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun run setup
+      - run: bun run test
+      - name: Install pinned Rust and devkitARM
+        run: |
+          rustup toolchain install nightly-2026-07-02 --profile minimal --component rust-src
+          docker pull devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5
+      - run: bun run build
+      - run: bun run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install/
+          if-no-files-found: error

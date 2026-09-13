@@ -1,0 +1,45 @@
+{
+  "$schema": "https://pocketjs.dev/schema/pocket-2.json",
+  "pocket": 2,
+  "id": "com.jdiller86.jellyfin3ds",
+  "name": "jellyfin3ds",
+  "title": "Jellyfin3DS",
+  "version": "0.1.0",
+  "engine": {
+    "capabilities": {
+      "requires": [
+        "text.glyphs.baked",
+        "input.buttons",
+        "io.offload",
+        "media.playback",
+        "display.auxiliary",
+        "input.touch.auxiliary"
+      ]
+    }
+  },
+  "app": {
+    "entry": "app/main.tsx",
+    "output": "jellyfin3ds",
+    "framework": "solid",
+    "viewport": {
+      "fixed": {
+        "logical": [
+          400,
+          240
+        ],
+        "presentation": "native"
+      }
+    },
+    "surfaces": {
+      "auxiliary": {
+        "fixed": {
+          "logical": [
+            320,
+            240
+          ],
+          "presentation": "native"
+        }
+      }
+    }
+  }
+}

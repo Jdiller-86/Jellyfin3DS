@@ -1,0 +1,15 @@
+{
+  "name": "jellyfin3ds",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun scripts/setup.ts",
+    "build": "bun scripts/build.ts --cia",
+    "build:guest": "bun scripts/build.ts --pocket-only",
+    "test": "bun test ./test/*.test.ts",
+    "companion": "bun host/companion.ts",
+    "pair": "bun scripts/pair.ts",
+    "package": "bun scripts/package.ts"
+  }
+}
