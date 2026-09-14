@@ -446,8 +446,10 @@ function App() {
         style={{ insetL: videoRect().x, insetT: videoRect().y, width: videoRect().w,
           height: videoRect().h, opacity: playing() && (status()?.presentedFrames ?? 0) > 0 ? 1 : 0 }}
       />
-      <Show when={!playing() && screen() === "setup"}>
-        <View class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-white border border-[#c4cbd1]">
+      <View
+        class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-white border border-[#c4cbd1]"
+        style={{ opacity: !playing() && screen() === "setup" ? 1 : 0 }}
+      >
           <Text class="absolute left-[14] top-[14] text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
           <Text class="absolute left-[14] top-[42] text-lg text-[#3c4954] font-bold">Internet Settings</Text>
           <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#00b6e7]" />
@@ -455,8 +457,7 @@ function App() {
           <Text class="absolute left-[14] top-[124] text-xs text-[#6a7680]">Only your 3DS and Jellyfin server are needed.</Text>
           <Text class="absolute left-[14] top-[145] text-xs text-[#6a7680]">Your password is used for sign-in, then discarded.</Text>
           <Text class="absolute left-[14] top-[169] text-sm text-[#008ab3]">Trusted HTTPS or local-network HTTP</Text>
-        </View>
-      </Show>
+      </View>
       <Show when={!playing() && screen() === "browser"}>
         <View class="absolute left-[12] top-[12] right-[12] bottom-[42] p-[12] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-2">
           <Text class="text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
@@ -511,7 +512,13 @@ function App() {
         <View class={setupField() === 2 ? "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg" : "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Password (not saved)</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{passwordLabel()}</Text>
         </View>
-        <View class={setupField() === 3 ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border-2 border-[#00b6e7] rounded-lg" : authenticated() ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg" : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"}>
+        <View class={authenticated()
+          ? setupField() === 3
+            ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg"
+            : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"
+          : setupField() === 3
+            ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg"
+            : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"}>
           <Text class="text-sm text-[#3c4954] font-bold">Sign in [A]</Text>
         </View>
         <Show when={authenticated()}><View class={setupField() === 4 ? "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#fff1f1] to-[#f3d2d2] border-2 border-[#cf5a5a] rounded-lg" : "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#704040]">Sign out</Text></View></Show>

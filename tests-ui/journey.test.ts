@@ -21,6 +21,7 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  const capture=async(name:string)=>{await Bun.write(`.pocket-build/validation/ui/${name}-top.png`,encodePNG(wasm.render().slice(),400,240));await Bun.write(`.pocket-build/validation/ui/${name}-bottom.png`,encodePNG(wasm.renderAuxiliary().slice(),320,240));};
  step(30);expect(commands.some(c=>c.t==="list")).toBe(false);await capture("setup");
  signedIn=true;session=0;step();session=2;step(30);expect(commands.some(c=>c.t==="list")).toBe(true);await capture("browse");
+ press(0x1);await capture("account");press(0x4000);
  press(0x20);expect(commands.filter(c=>c.t==="list").at(-1).offset).toBe(5);
  tap(60,62);await capture("detail");press(0x2000);expect(opened).toBe(1);expect(position).toBe(12);await capture("player");
  press(0x8);expect(phase).toBe("paused");press(0x8);expect(phase).toBe("playing");
