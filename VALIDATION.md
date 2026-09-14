@@ -1,16 +1,17 @@
 # Validation
 
-Automated checks cover Jellyfin base URLs, authentication, API errors, bounded pagination, resume tick conversion, metadata transport limits, stream selection, playback reporting, H.264 packet boundaries, aspect-ratio fitting, and a real FFmpeg encode with silent audio synthesis. Guest compilation checks the manifest and the actual PocketJS component/compiler interface. CI builds the native `.3dsx` and `.cia` and assembles the install artifact.
+Automated checks cover the direct-provider build overlay, authenticated header transport, TLS verification, CA embedding, reference decoder texture bounds, bounded pagination, the PocketJS manifest/compiler contract, and a simulated two-screen browse/player journey. CI cross-compiles FFmpeg and the 3DS host, builds both `.3dsx` and `.cia`, packages their checksums, and uploads the install layout.
 
-This project has **not yet been validated on a physical 3DS or against the user's Jellyfin server**. A passing native build does not establish working hardware video, audio, or Wi-Fi.
+The implementation has **not yet been tested on a physical 3DS or against the user's Jellyfin server**. A successful cross-build proves format generation and linking, not hardware playback or compatibility with every Jellyfin version.
 
-Before calling a release hardware-tested, verify on a New 3DS-family device:
+Before marking a release hardware-tested, verify on a New 3DS-family system:
 
-- Launch each distribution format and pair without a developer key.
-- Browse more than one page, navigate series/seasons/episodes, search by touch and buttons, and use empty/error views.
-- Play a movie with audio for at least five minutes; check aspect ratio, sync, pause/resume, repeated seeking, and volume.
+- Launch the `.3dsx` from Homebrew Launcher and install/launch the `.cia` with FBI.
+- Complete first-run sign-in using LAN HTTP and trusted HTTPS; reboot and confirm token restore; sign out and confirm reauthentication is required.
+- Browse multiple pages, series, seasons, and episodes; search with touch and buttons; exercise empty and error views.
+- Play video with audio for at least five minutes and check aspect ratio, sync, buffering recovery, pause/resume, repeated seeking, volume, and end-of-stream behavior.
 - Stop and confirm the Jellyfin resume position, including seeking backward and starting from zero.
-- Browse while playing, switch back to controls, and test companion restart/Wi-Fi loss.
-- Verify permission errors, invalid credentials, silent media, missing DSP firmware, and unsupported decoder messages.
+- Browse while playing and return to player controls.
+- Test Wi-Fi loss, server restart, expired credentials, denied transcoding, self-signed TLS, silent media, missing DSP firmware, and an original 3DS hardware-rejection message.
 
-Known limitations are listed in README.md and INSTALL.md.
+Known product limits are listed in README.md and INSTALL.md.

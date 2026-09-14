@@ -2,86 +2,69 @@
 
 ## Requirements
 
-- A **New 3DS / New 3DS XL (LL) / New 2DS XL** with homebrew, Wi-Fi, and DSP firmware on the SD card. Original 3DS models lack the decoder used by this client.
-- Homebrew Launcher for `.3dsx`, or FBI and custom firmware for `.cia`.
-- A Windows, Linux, or macOS computer on the same trusted LAN, with **Bun** and **FFmpeg with libx264** on PATH. Linux is the automated build/test environment; the companion needs a hardware smoke test on your setup.
-- Jellyfin with a user permitted to access and stream the requested libraries. Use that user's credentials, not an admin API key.
+- A **New 3DS / New 3DS XL (LL) / New 2DS XL** with custom firmware, Wi-Fi, and DSP firmware on the SD card
+- Homebrew Launcher for the `.3dsx`, or FBI for the `.cia`
+- A reachable Jellyfin server with transcoding enabled for your user
+- The Jellyfin server URL, username, and password
 
-## 1. Obtain and copy the application
+No computer, phone, companion app, proxy, administrator API key, or Jellyfin plugin is required while using Jellyfin3DS.
 
-In the GitHub repository, open **Actions → Build 3DS homebrew → a successful run → Artifacts → Jellyfin3DS-install**. Extract the downloaded ZIP.
+## 1. Install the application
 
-**Homebrew Launcher:** copy the extracted `3ds` directory to the root of the SD card, preserving `3ds/Jellyfin3DS/Jellyfin3DS.3dsx`.
+Open **Actions → Build 3DS homebrew → a successful run → Artifacts → Jellyfin3DS-install** in the GitHub repository and extract the ZIP.
 
-**FBI/HOME Menu:** copy `cias/Jellyfin3DS.cia` to the SD card and use FBI's **SD → cias → Jellyfin3DS.cia → Install CIA**. You only need one launch method. Pairing is required for either method.
+For Homebrew Launcher, copy the extracted `3ds` directory to the SD-card root. The final path must be:
 
-If DSP audio firmware is absent, use Rosalina's **Miscellaneous options → Dump DSP firmware**. It should create `/3ds/dspfirm.cdc`. Do not download somebody else's firmware.
-
-## 2. Set up the companion
-
-Clone this repository with submodules on the computer that will run alongside Jellyfin:
-
-```sh
-git clone --recurse-submodules https://github.com/Jdiller-86/Jellyfin3DS.git
-cd Jellyfin3DS
-bun run setup
+```text
+/3ds/Jellyfin3DS/Jellyfin3DS.3dsx
 ```
 
-If testing a pull request, check out its branch before setup. Copy `.env.example` to `.env` and edit all five values. `JELLYFIN_URL` is the server's base URL (including any `/jellyfin` prefix). Use the console's IP for `DEVICE_IP` and the companion's LAN IPv4 for `COMPANION_IP`. Jellyfin can run on a different machine.
+For a HOME Menu entry, copy `cias/Jellyfin3DS.cia` to the SD card, then choose **FBI → SD → cias → Jellyfin3DS.cia → Install CIA**. Only one launch method is needed.
 
-Reserve the console and companion IPs in your router for convenient reconnects. The companion's `MEDIA_PORT` defaults to 8742. Permit LAN inbound TCP 8742 on the companion computer and outbound TCP 8741 to the console. Keep these ports off the public internet.
+If audio DSP firmware is absent, open Rosalina with L + Down + SELECT and choose **Miscellaneous options → Dump DSP firmware**. This creates `/3ds/dspfirm.cdc`. Do not download another console's firmware.
 
-## 3. Pair the SD card
+## 2. Sign in on the 3DS
 
-With the SD card mounted on the companion, run one of:
+Launch Jellyfin3DS and complete **Jellyfin Connection Settings** on the lower screen:
 
-```sh
-bun run pair --sd E:/
-bun run pair --sd /media/yourname/SDCARD
-```
+1. Enter the full server URL, including `http://` or `https://`, port, and any reverse-proxy path. Example: `http://192.168.1.20:8096`.
+2. Enter the Jellyfin username.
+3. Enter the password and choose **Sign in**.
 
-The command creates a random key at `SD:/pocketjs/offload/<app-slot>.key` and keeps the matching `.pocket/offload.key` on the computer. It preserves existing matching keys and refuses conflicting ones. Keep that local folder when upgrading.
+Touch a field or select it with the D-pad and A. The keyboard uses START to accept and B to close. The password is cleared after sign-in. The app stores the issued Jellyfin token at `/3ds/Jellyfin3DS/config.json`; open **Account** to change servers or sign out.
 
-If using ftpd instead of a card reader, create an empty staging directory, run `bun run pair --sd <staging-directory>`, then upload its `pocketjs` folder to the root of the console SD card. Also upload the `.3dsx` from the install artifact to `/3ds/Jellyfin3DS/`. The pairing command copies a local build's `.3dsx` when available; with a downloaded artifact, copy its application file yourself.
+For HTTPS, the certificate must chain to a public CA included in the app. Self-signed or private-CA certificates are rejected. Plain HTTP is suitable only on a local network you trust.
 
-Eject the SD card and return it to the console. Close ftpd before launching the app.
-
-## 4. Start watching
-
-Open Jellyfin3DS, then run on the companion:
-
-```sh
-bun run companion
-```
-
-Keep this process running. The console will connect, show libraries, and reconnect after a dropped connection. Reconnection stops the old video; choose it again from Continue watching.
+## Controls
 
 | Control | Action |
 | --- | --- |
-| D-pad Up/Down | Select a list row |
-| A | Open folder/details; resume or play; pause in player controls |
-| B | Back / return to browsing |
+| D-pad Up/Down | Select a list or settings row |
+| A | Edit/confirm; open folder/details; play; pause in controls |
+| B | Back; close the keyboard |
 | Left/Right | Previous/next page; seek in player controls |
-| X | Search keyboard (touch or D-pad); START submits |
+| X | Open search; START submits the keyboard |
 | Y | Continue watching |
-| SELECT | Switch between browsing and active player controls |
-| START | Pause/resume |
+| SELECT | Open Account, or switch back to active player controls |
+| START | Pause/resume during playback |
 | L / R | Seek backward/forward 10 seconds |
-| Touch screen | Tabs, rows, playback buttons, volume and Stop |
+| Touch screen | Tabs, rows, account fields, playback, volume, and Stop |
 | L + R + START | Exit the PocketJS host |
 
-Stop playback before exiting to send the latest resume position.
+Stop playback before exiting when possible so Jellyfin receives the latest resume position.
 
 ## Troubleshooting
 
-**Waiting for companion:** confirm both IPs, Wi-Fi, matching keys, the running companion, and firewall rules. Guest Wi-Fi/client isolation can prevent the connection. No developer key or PocketJS devserver is required.
+**Could not reach the Jellyfin server:** confirm the 3DS has Wi-Fi, the URL and port are correct, and the server allows connections from the console's network. Guest Wi-Fi isolation can block LAN servers.
 
-**Credentials invalid:** correct `.env`, stop the companion and restart it. The client does not store your password on the 3DS.
+**TLS certificate is not trusted:** use a certificate from a public CA in the bundled trust store, or use local HTTP on a trusted LAN. Certificate checking cannot be disabled in the app.
 
-**Hardware decoder unavailable:** video is unsupported on original 3DS/3DS XL/2DS. This also may occur in emulators without MVD support.
+**Username or password is incorrect:** reopen Account and enter the credentials again. The password is not stored.
 
-**Audio unavailable:** confirm `/3ds/dspfirm.cdc` and reboot the app.
+**Video could not start / hardware decoder unavailable:** playback requires a New 3DS-family system. Emulator MVD support varies.
 
-**Buffering/source error:** check FFmpeg has libx264 (`ffmpeg -encoders`), the user can stream the item, and the companion can reach Jellyfin. First-version playback uses the default audio track and does not support live/DRM media or subtitles.
+**Audio output unavailable:** dump DSP firmware with Rosalina, then restart the application.
 
-**CIA versus 3DSX:** installing a CIA does not remove the companion or hardware requirements. A `.pocket` file cannot be installed with FBI.
+**Demux, decode, or buffering error:** confirm the item is playable by that Jellyfin user and the server can transcode it to H.264/AAC MPEG-TS. The first version does not support live TV, DRM, subtitles, or alternate track selection.
+
+**CIA versus 3DSX:** both formats run the same direct client. Installing the CIA does not change the New 3DS, DSP, network, or server-transcoding requirements.

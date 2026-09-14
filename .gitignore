@@ -6,3 +6,4 @@ node_modules/
 .pocket-build/
 dist/
 *.log
+*.swp

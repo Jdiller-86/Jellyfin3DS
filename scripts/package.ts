@@ -7,3 +7,9 @@ for(const [ext,path] of [["3dsx",`${out}/3ds/Jellyfin3DS/Jellyfin3DS.3dsx`],["ci
 copyFileSync("INSTALL.md",`${out}/INSTALL.md`);
 const files=["3ds/Jellyfin3DS/Jellyfin3DS.3dsx","cias/Jellyfin3DS.cia"];
 writeFileSync(`${out}/SHA256SUMS`,files.map(p=>`${createHash("sha256").update(readFileSync(`${out}/${p}`)).digest("hex")}  ${p}`).join("\n")+"\n");
+
+mkdirSync(`${out}/licenses`,{recursive:true});
+copyFileSync("vendor/pocketjs/LICENSE",`${out}/licenses/PocketJS.txt`);
+copyFileSync("vendor/pocketjs/assets/fonts/LICENSE.txt",`${out}/licenses/Inter-OFL.txt`);
+copyFileSync("vendor/jellyfin-3ds/LICENSE",`${out}/licenses/GPL-3.0.txt`);
+copyFileSync("THIRD_PARTY.md",`${out}/licenses/THIRD_PARTY.md`);
