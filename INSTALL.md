@@ -11,7 +11,15 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 
 ## 1. Install the application
 
-Open **Actions → Build 3DS homebrew → a successful run → Artifacts → Jellyfin3DS-install** in the GitHub repository and extract the ZIP.
+For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
+
+```text
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia
+```
+
+FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
+
+For a manual install, open **Actions → Build 3DS homebrew → a successful run → Artifacts → Jellyfin3DS-install** in the GitHub repository and extract the ZIP.
 
 For Homebrew Launcher, copy the extracted `3ds` directory to the SD-card root. The final path must be:
 
@@ -68,3 +76,5 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 **Demux, decode, or buffering error:** confirm the item is playable by that Jellyfin user and the server can transcode it to H.264/AAC MPEG-TS. The first version does not support live TV, DRM, subtitles, or alternate track selection.
 
 **CIA versus 3DSX:** both formats run the same direct client. Installing the CIA does not change the New 3DS, DSP, network, or server-transcoding requirements.
+
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.0` release is publicly accessible. FBI cannot authenticate to a private GitHub release.

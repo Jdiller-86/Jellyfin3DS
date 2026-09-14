@@ -45,3 +45,38 @@ jobs:
           name: Jellyfin3DS-install
           path: dist/install/
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/pocketjs-client')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install
+      - name: Publish the FBI-installable v0.2.0 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          release_notes='Experimental PocketJS build. Physical New 3DS and Jellyfin-server validation is still required; see VALIDATION.md.'
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release upload v0.2.0 \
+              dist/install/cias/Jellyfin3DS.cia \
+              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+              dist/install/SHA256SUMS --clobber
+            gh release edit v0.2.0 --prerelease --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
+          else
+            gh release create v0.2.0 \
+              dist/install/cias/Jellyfin3DS.cia \
+              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+              dist/install/SHA256SUMS \
+              --prerelease --target "$GITHUB_SHA" \
+              --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
+          fi
+          verify_dir="$(mktemp -d)"
+          gh release download v0.2.0 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"

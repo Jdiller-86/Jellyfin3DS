@@ -1,6 +1,6 @@
 # Validation
 
-Automated checks cover the direct-provider build overlay, authenticated header transport, TLS verification, CA embedding, reference decoder texture bounds, bounded pagination, the PocketJS manifest/compiler contract, and a simulated two-screen browse/player journey. CI cross-compiles FFmpeg and the 3DS host, builds both `.3dsx` and `.cia`, packages their checksums, and uploads the install layout.
+Automated checks cover the direct-provider build overlay, authenticated header transport, TLS verification, CA embedding, reference decoder texture bounds, bounded pagination, the PocketJS manifest/compiler contract, and a simulated two-screen browse/player journey. CI cross-compiles FFmpeg and the 3DS host, builds both `.3dsx` and `.cia`, packages their checksums and FBI QR, uploads the install layout, and byte-compares the published FBI release asset with the packaged CIA.
 
 The implementation has **not yet been tested on a physical 3DS or against the user's Jellyfin server**. A successful cross-build proves format generation and linking, not hardware playback or compatibility with every Jellyfin version.
 

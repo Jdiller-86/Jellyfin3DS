@@ -6,13 +6,23 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **Video requires a New Nintendo 3DS, New 3DS XL/LL, or New 2DS XL.** Original 3DS/3DS XL/2DS systems do not provide the MVD H.264 decoder. This remains an experimental client and has not yet been certified on physical hardware.
 
-## Install
+## Install with FBI
+
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.0` GitHub Release.
+
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.0" width="320"></a>
+
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia>
+
+FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
+
+## Manual install
 
 Download the `Jellyfin3DS-install` artifact from a successful **Build 3DS homebrew** GitHub Actions run. It contains:
 
 - `3ds/Jellyfin3DS/Jellyfin3DS.3dsx` for Homebrew Launcher
 - `cias/Jellyfin3DS.cia` for FBI and a HOME Menu entry
-- installation instructions and SHA-256 checksums
+- the FBI QR image, installation instructions, and SHA-256 checksums
 
 See [INSTALL.md](INSTALL.md) for SD-card placement, first-run sign-in, controls, and troubleshooting. A `.pocket` file is a PocketJS runtime package, not a Homebrew Launcher or FBI install file.
 
