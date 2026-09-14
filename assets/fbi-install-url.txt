@@ -1,1 +1,1 @@
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.2/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.3/Jellyfin3DS.cia

@@ -25,6 +25,7 @@ for i in range(10):
     if name:
         entries[name] = exefs[512+offset:512+offset+size]
 assert entries.get('banner', b'')[:4] == b'CBMD', 'HOME Menu banner missing'
+assert 'logo' not in entries and u32(ncch, 0x19C) == 0, 'Generic launch logo is still embedded'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]

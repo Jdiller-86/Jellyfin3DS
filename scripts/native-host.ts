@@ -143,7 +143,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.2\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.3\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -183,6 +183,7 @@ export function transformMakefile(source: string): string {
     "CIA CA dependency",
   );
   source = replaceOne(source, "-elf $(ELF) -icon $(SMDH)", "-elf $(ELF) -icon $(SMDH) -banner /out/.pocket/banner/banner.bnr", "HOME Menu banner");
+  source = replaceOne(source, "-target t -exefslogo", "-target t", "omit generic launch logo");
   source = source.replace("$(RSF) $(CIA_STAMP)\n", "$(RSF) $(CIA_STAMP) /out/.pocket/banner/banner.bnr\n");
   // FFmpeg is built with 32-bit enums. Its public structs must use the same ABI.
   source += "\n$(BUILD)/video_player.o $(BUILD)/ffmpeg_demux.o: CFLAGS += -fno-short-enums\n";
@@ -190,6 +191,7 @@ export function transformMakefile(source: string): string {
 }
 
 export function transformRsf(source: string): string {
+  source = replaceOne(source, "Logo                    : Homebrew", "Logo                    : None", "no Homebrew splash");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  InterruptNumbers:", "DSP RAM mapping");
 }

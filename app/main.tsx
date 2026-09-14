@@ -48,7 +48,7 @@ function App() {
   const [controls, setControls] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [volume, setVolume] = createSignal(0.8);
-  let history: Location[] = [];
+  let history: { location: Location; page: Page; index: number }[] = [];
   let frame = 0;
   let session = 0;
   let operation = 0;
@@ -96,7 +96,7 @@ function App() {
     const owner = foreground ? ++operation : operation;
     if (foreground) {
       setBusy(true);
-      setMessage("Working...");
+      setMessage("Loading…");
     }
     const id = rpc.request("jellyfin.command", JSON.stringify(commandValue), (result) => {
       if (foreground && owner !== operation) return;
@@ -199,7 +199,8 @@ function App() {
   function open(item: Item) {
     if (busy()) return;
     if (item.folder) {
-      history.push(where());
+      if (history.length >= 16) history.shift();
+      history.push({ location: where(), page: page(), index: index() });
       load({ mode: "folder", title: item.name, parent: item.id, offset: 0 });
     } else {
       setDetail(item);
@@ -281,7 +282,10 @@ function App() {
       return;
     }
     const previous = history.pop();
-    if (previous) load(previous);
+    if (previous) {
+      setWhere(previous.location); setPage(previous.page); setIndex(previous.index);
+      setDetail(undefined); setControls(false); setMessage("");
+    }
     else home("libraries");
   }
 
@@ -325,6 +329,7 @@ function App() {
 
   createGesture({
     surface: "auxiliary",
+    axis: "y",
     onPanStart: () => { dragY = 0; },
     onPanMove: (contact) => {
       if (anyOsk() || contact.startY < 48 || contact.startY >= 188) return;
@@ -510,7 +515,7 @@ function App() {
           <Text class="text-xs text-[#6a7680]">Starting…</Text>
         </View>
       </Show>
-      <Show when={message() && message() !== "Working..." && (!playing() || status()?.phase === "error")}>
+      <Show when={message() && message() !== "Loading…" && (!playing() || status()?.phase === "error")}>
         <View class="absolute left-[20] right-[20] bottom-[30] p-[8] rounded-lg bg-[#fff8df] border border-[#dacb99]"><Text class="text-xs text-[#6a5b36]">{message()}</Text></View>
       </Show>
       <Show when={searchOsk.isOpen() && !playing()}>
@@ -584,7 +589,7 @@ function App() {
           <View class="absolute left-[8] right-[8] top-[134] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Vol -</Text><Text class="text-sm text-[#75409b]">{Math.round(volume() * 100)}%</Text><Text class="text-sm text-[#3c4954]">Vol +</Text></View>
           <View class="absolute left-[8] right-[8] top-[180] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Browse</Text><Text class="text-sm text-[#3c4954]">Stop</Text></View>
         </Show>
-        <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || "A: Open / X: Search / SELECT: Account")}</Text>
+        <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || "A: Open   X: Search")}</Text>
       </Show>
 
       <Show when={anyOsk()}>

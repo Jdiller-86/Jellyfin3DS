@@ -38,6 +38,10 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           bun run test:ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-ui
+          path: .pocket-build/validation/ui/
       - run: bun run build
       - run: python3 scripts/verify-cia.py dist/3ds/Jellyfin3DS.cia
       - name: Preserve native crash symbols
@@ -67,23 +71,23 @@ jobs:
         with:
           name: Jellyfin3DS-install
           path: dist/install
-      - name: Publish the FBI-installable v0.2.2 prerelease
+      - name: Publish the FBI-installable v0.2.3 prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          release_notes='Experimental v0.2.2: repairs MVD input addresses and NAL boundaries; adds vertical browsing and selected-item server artwork. Physical-console playback retesting is required.'
-          if gh release view v0.2.2 >/dev/null 2>&1; then
-            echo 'v0.2.2 already exists; versioned releases are immutable. Bump the version to publish another build.'
+          release_notes='Experimental v0.2.3: repairs MVD input addresses and NAL boundaries; adds purple artwork browsing, restores Back position, and omits the generic Homebrew launch logo. Physical-console playback retesting is required.'
+          if gh release view v0.2.3 >/dev/null 2>&1; then
+            echo 'v0.2.3 already exists; versioned releases are immutable. Bump the version to publish another build.'
             exit 0
           fi
-          gh release create v0.2.2 \
+          gh release create v0.2.3 \
             dist/install/cias/Jellyfin3DS.cia \
             dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
             dist/install/SHA256SUMS \
             --prerelease --target "$RELEASE_COMMIT" \
-            --title 'Jellyfin3DS v0.2.2 (experimental)' --notes "$release_notes"
+            --title 'Jellyfin3DS v0.2.3 (experimental)' --notes "$release_notes"
           verify_dir="$(mktemp -d)"
-          gh release download v0.2.2 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          gh release download v0.2.3 --pattern Jellyfin3DS.cia --dir "$verify_dir"
           cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"

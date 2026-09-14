@@ -19,7 +19,6 @@ export async function buildBanner(root: string) {
   c.textAlign = "center"; c.fillStyle = "#3c4954"; c.font = 'bold 26px "Jellyfin UI"';
   c.fillText("Jellyfin3DS", 128, 88);
   c.fillStyle = "#75409b"; c.font = '12px "Jellyfin UI"';
-  c.fillText("Media for Nintendo 3DS", 128, 110);
   writeFileSync(join(dir, "banner.png"), canvas.toBuffer("image/png"));
   const rate = 22050, count = rate, wav = Buffer.alloc(44 + count * 2);
   wav.write("RIFF"); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
