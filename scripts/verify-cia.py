@@ -12,8 +12,9 @@ ncch = data[content:]
 assert ncch[0x100:0x104] == b'NCCH', 'Missing NCCH content'
 exheader = ncch[0x200:0x600]
 caps = [u32(exheader, at) for at in range(0x370, 0x3E0, 4)]
-# Static mapping descriptors encode the inclusive first and last 4 KiB pages.
-assert any((a & 0xFFFFF) == 0x1FF00 and (b & 0xFFFFF) == 0x1FF7F
+# makerom GetARM11IOMappings encodes an exclusive end page (AddressEnd+0x1000).
+# Both descriptors must be writable static mappings, not merely matching pages.
+assert any(a == 0xFF81FF00 and b == 0xFF81FF80
            for a, b in zip(caps, caps[1:])), 'DSP RAM range missing from CIA'
 exefs_at = u32(ncch, 0x1A0) * 512
 exefs = ncch[exefs_at:]
