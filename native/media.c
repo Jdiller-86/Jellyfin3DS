@@ -25,11 +25,15 @@ typedef struct {
 } PreparedStream;
 
 static PreparedStream prepared;
+static PreparedStream pending_stream;
 static LightLock prepared_lock;
 static bool started;
 static bool ndsp_ready;
 static Result ndsp_result;
 static bool requested_open;
+static bool open_pending;
+static bool close_pending;
+static bool open_failed;
 static bool has_frame;
 static bool desired_paused;
 static bool hardware_supported;
@@ -91,6 +95,9 @@ void media_stop(void) {
   started = false;
   ndsp_ready = false;
   requested_open = false;
+  open_pending = false;
+  close_pending = false;
+  open_failed = false;
   has_frame = false;
   texture_handle = -1;
 }
@@ -101,31 +108,32 @@ bool media_open(const char *host, unsigned port, const char *token) {
   (void)token;
   if (!started || !ndsp_ready || !hardware_supported) return false;
 
-  PreparedStream next;
   LightLock_Lock(&prepared_lock);
   if (!prepared.ready) {
     LightLock_Unlock(&prepared_lock);
     return false;
   }
-  next = prepared;
+  pending_stream = prepared;
   memset(&prepared, 0, sizeof prepared);
   LightLock_Unlock(&prepared_lock);
 
   requested_open = true;
+  open_pending = true;
+  close_pending = false;
+  open_failed = false;
   has_frame = false;
   desired_paused = false;
-  bool opened = video_player_play(next.url, next.token, next.duration_ticks,
-                                  next.seek_ticks, VP_3D_NONE);
-  if (!opened) requested_open = false;
-  return opened;
+  return true;
 }
 
 void media_close(void) {
   requested_open = false;
+  open_pending = false;
+  close_pending = true;
+  open_failed = false;
   desired_paused = false;
   has_frame = false;
   direct_media_forget_prepared();
-  video_player_stop();
 }
 
 void media_paused(bool paused) {
@@ -164,6 +172,21 @@ C3D_Tex *media_texture(int32_t handle, float *u_scale, float *v_scale) {
 }
 
 void media_present(void) {
+  /* FrameBegin has retired the prior PICA list before this call, so texture
+   * deletion and creation happen only at this GPU-idle boundary. */
+  if (close_pending) {
+    video_player_stop();
+    close_pending = false;
+  }
+  if (open_pending) {
+    video_player_stop();
+    open_failed = !video_player_play(
+      pending_stream.url, pending_stream.token, pending_stream.duration_ticks,
+      pending_stream.seek_ticks, VP_3D_NONE
+    );
+    memset(&pending_stream, 0, sizeof pending_stream);
+    open_pending = false;
+  }
   if (!requested_open) return;
 
   video_status_t status = video_player_get_status();
@@ -196,6 +219,9 @@ void media_snapshot(char *out, size_t capacity) {
   video_status_t status = video_player_get_status();
   const char *phase = "idle";
   if (requested_open) {
+    if (open_failed) phase = "error";
+    else if (open_pending) phase = "opening";
+    else
     switch (status.state) {
       case VIDEO_LOADING: phase = "buffering"; break;
       case VIDEO_PLAYING: phase = desired_paused ? "paused" : "playing"; break;
@@ -206,7 +232,10 @@ void media_snapshot(char *out, size_t capacity) {
     }
   }
   char error[128] = {0};
-  if (requested_open && !ndsp_ready) {
+  if (requested_open && open_failed) {
+    phase = "error";
+    copy_text(error, sizeof error, "Could not allocate the video player");
+  } else if (requested_open && !ndsp_ready) {
     phase = "error";
     if ((unsigned)ndsp_result ==
         (unsigned)MAKERESULT(RL_PERMANENT, RS_NOTFOUND, RM_DSP, RD_NOT_FOUND)) {

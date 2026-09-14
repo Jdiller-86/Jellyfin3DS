@@ -28,6 +28,8 @@ test("native decoder keeps authentication in a header and verifies TLS", () => {
   expect(source).toContain("CURLOPT_SSL_VERIFYPEER, 1L");
   expect(source).toContain('CURLOPT_CAINFO, "romfs:/cacert.pem"');
   expect(source).not.toContain("CURLOPT_SSL_VERIFYPEER, 0L");
+  expect(source).toContain("CURLOPT_XFERINFOFUNCTION, jellyfin3ds_net_progress");
+  expect(source).toContain("CURLOPT_CONNECTTIMEOUT, 10L");
   expect(source).toContain("video_player_texture");
 });
 

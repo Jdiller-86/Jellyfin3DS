@@ -105,6 +105,15 @@ static bool valid_id(const char *value) {
   return true;
 }
 
+static bool valid_token(const char *value) {
+  if (!bounded_text(value, TOKEN_MAX, false)) return false;
+  for (size_t i = 0; value[i]; i++) {
+    unsigned char c = (unsigned char)value[i];
+    if (!isalnum(c) && c != '-' && c != '_' && c != '.' && c != '~') return false;
+  }
+  return true;
+}
+
 static bool normalize_server(const char *value, char *out, size_t capacity) {
   if (!bounded_text(value, capacity, false)) return false;
   if (strncmp(value, "http://", 7) != 0 && strncmp(value, "https://", 8) != 0)
@@ -119,7 +128,7 @@ static bool normalize_server(const char *value, char *out, size_t capacity) {
 }
 
 static bool authenticated(void) {
-  return config.server[0] && config.token[0] && valid_id(config.user_id) &&
+  return config.server[0] && valid_token(config.token) && valid_id(config.user_id) &&
          valid_id(config.device_id);
 }
 
@@ -178,7 +187,7 @@ static void config_load(void) {
           copy_text(config.server, sizeof config.server, normalized);
         if (username && bounded_text(username, USERNAME_MAX, true))
           copy_text(config.username, sizeof config.username, username);
-        if (token && bounded_text(token, TOKEN_MAX, true))
+        if (token && (!token[0] || valid_token(token)))
           copy_text(config.token, sizeof config.token, token);
         if (user_id && valid_id(user_id))
           copy_text(config.user_id, sizeof config.user_id, user_id);
@@ -381,7 +390,7 @@ static bool login_command(const cJSON *command, cJSON **result, char *error,
   const char *access_token = json_string(reply, "AccessToken");
   const cJSON *user = json_member(reply, "User");
   const char *user_id = cJSON_IsObject(user) ? json_string(user, "Id") : NULL;
-  if (!bounded_text(access_token, TOKEN_MAX, false) || !valid_id(user_id)) {
+  if (!valid_token(access_token) || !valid_id(user_id)) {
     cJSON_Delete(reply);
     copy_text(error, error_capacity, "Jellyfin login response was incomplete");
     return false;

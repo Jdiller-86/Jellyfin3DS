@@ -78,15 +78,33 @@ export function transformVideoSource(source: string): string {
   );
   source = replaceOne(
     source,
+    "static void net_thread_func(void *arg)",
+    `static int jellyfin3ds_net_progress(void *clientp, curl_off_t download_total,\n                                        curl_off_t downloaded, curl_off_t upload_total,\n                                        curl_off_t uploaded)\n{\n    (void)clientp;\n    (void)download_total;\n    (void)downloaded;\n    (void)upload_total;\n    (void)uploaded;\n    return s_vp.stop_requested ? 1 : 0;\n}\n\nstatic void net_thread_func(void *arg)`,
+    "interruptible video transfer",
+  );
+  source = replaceOne(
+    source,
     "    curl_easy_setopt(curl, CURLOPT_URL, s_vp.url);",
     `    struct curl_slist *headers = NULL;\n    char token_header[320];\n    if (s_vp.token[0]) {\n        snprintf(token_header, sizeof token_header, \"X-Emby-Token: %s\", s_vp.token);\n        headers = curl_slist_append(headers, token_header);\n    }\n    curl_easy_setopt(curl, CURLOPT_URL, s_vp.url);\n    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);`,
     "video auth header",
   );
   source = replaceOne(
     source,
+    "    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s_vp.demux);",
+    `    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s_vp.demux);\n    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);\n    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, jellyfin3ds_net_progress);`,
+    "video stop callback",
+  );
+  source = replaceOne(
+    source,
     "    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);\n    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);",
     `    /* ${MARKER}: never forward the token to another redirect host. */\n    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);\n    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));\n    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);\n    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);\n    curl_easy_setopt(curl, CURLOPT_CAINFO, \"romfs:/cacert.pem\");`,
     "video TLS",
+  );
+  source = replaceOne(
+    source,
+    "    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L); /* server may need time to start transcoding */",
+    "    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); /* keep cancellation responsive */",
+    "video connect timeout",
   );
   source = replaceOne(
     source,

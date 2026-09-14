@@ -447,14 +447,14 @@ function App() {
           height: videoRect().h, opacity: playing() && (status()?.presentedFrames ?? 0) > 0 ? 1 : 0 }}
       />
       <Show when={!playing() && screen() === "setup"}>
-        <View class="absolute left-[12] top-[12] right-[12] bottom-[18] p-[14] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-3">
-          <Text class="text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
-          <Text class="text-lg text-[#3c4954] font-bold">Internet Settings</Text>
-          <View class="h-[2] w-[88] bg-[#00b6e7]" />
-          <Text class="text-base text-[#3c4954]">Connect this system directly to Jellyfin.</Text>
-          <Text class="text-sm text-[#6a7680]">Only your 3DS and Jellyfin server are needed.</Text>
-          <Text class="text-sm text-[#6a7680]">Passwords are used for sign-in and are not saved.</Text>
-          <Text class="text-sm text-[#008ab3]">Trusted HTTPS or local-network HTTP</Text>
+        <View class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-white border border-[#c4cbd1]">
+          <Text class="absolute left-[14] top-[14] text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
+          <Text class="absolute left-[14] top-[42] text-lg text-[#3c4954] font-bold">Internet Settings</Text>
+          <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#00b6e7]" />
+          <Text class="absolute left-[14] top-[94] text-base text-[#3c4954]">Connect this system directly to Jellyfin.</Text>
+          <Text class="absolute left-[14] top-[124] text-xs text-[#6a7680]">Only your 3DS and Jellyfin server are needed.</Text>
+          <Text class="absolute left-[14] top-[145] text-xs text-[#6a7680]">Your password is used for sign-in, then discarded.</Text>
+          <Text class="absolute left-[14] top-[169] text-sm text-[#008ab3]">Trusted HTTPS or local-network HTTP</Text>
         </View>
       </Show>
       <Show when={!playing() && screen() === "browser"}>
