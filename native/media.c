@@ -41,6 +41,26 @@ bool direct_media_has_mvd(void) { return hardware_supported; }
 static float desired_volume = 0.8f;
 static int32_t texture_handle = -1;
 static unsigned generation;
+static uint8_t *art_pending;
+static int art_width, art_height, art_handle = -1;
+static unsigned art_request, art_complete;
+
+int direct_art_upload(uint8_t *pixels, int width, int height) {
+  LightLock_Lock(&prepared_lock);
+  if (art_pending || !started) { LightLock_Unlock(&prepared_lock); free(pixels); return -1; }
+  art_pending = pixels; art_width = width; art_height = height;
+  unsigned request = ++art_request;
+  LightLock_Unlock(&prepared_lock);
+  for (int i = 0; i < 200; ++i) {
+    LightLock_Lock(&prepared_lock);
+    bool done = art_complete == request;
+    int handle = art_handle;
+    LightLock_Unlock(&prepared_lock);
+    if (done) return handle;
+    svcSleepThread(10000000LL);
+  }
+  return -1;
+}
 
 static void copy_text(char *out, size_t capacity, const char *value) {
   if (!capacity) return;
@@ -171,6 +191,10 @@ int32_t media_texture_handle(void) {
 void media_forget_guest(void) {
   media_close();
   texture_handle = -1;
+  /* Guest reset releases the UI texture registry; do not later free a reused ID. */
+  LightLock_Lock(&prepared_lock);
+  art_handle = -1;
+  LightLock_Unlock(&prepared_lock);
 }
 
 C3D_Tex *media_texture(int32_t handle, float *u_scale, float *v_scale) {
@@ -181,6 +205,15 @@ C3D_Tex *media_texture(int32_t handle, float *u_scale, float *v_scale) {
 }
 
 void media_present(void) {
+  LightLock_Lock(&prepared_lock);
+  if (art_pending) {
+    if (art_handle >= 0) ui_free_texture(art_handle);
+    art_handle = ui_upload_texture(art_pending, (size_t)art_width * art_height * 4,
+                                  art_width, art_height, 3);
+    free(art_pending); art_pending = NULL;
+    art_complete = art_request;
+  }
+  LightLock_Unlock(&prepared_lock);
   /* FrameBegin has retired the prior PICA list before this call, so texture
    * deletion and creation happen only at this GPU-idle boundary. */
   if (close_pending) {

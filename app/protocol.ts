@@ -7,6 +7,7 @@ export interface Item {
   resume: number;
   played: boolean;
   year?: number;
+  artId?: string;
 }
 export interface Page { items: Item[]; total: number; offset: number }
 export interface Hello {

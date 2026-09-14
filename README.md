@@ -1,22 +1,26 @@
 # Jellyfin3DS
 
-Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with [PocketJS](https://github.com/pocket-stack/pocketjs). It browses libraries, seasons, and episodes; searches; resumes videos; and reports playback progress. The 400×240 upper screen carries video and context while the 320×240 touch screen carries navigation and controls in a theme inspired by the native Nintendo 3DS System Settings UI.
+Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with [PocketJS](https://github.com/pocket-stack/pocketjs). It browses libraries, seasons, and episodes; searches; resumes videos; and reports playback progress. The 400×240 upper screen carries video and context while the 320×240 touch screen carries navigation and controls in a theme with Jellyfin-purple accents and native 3DS-style panels.
 
 **No companion computer, phone, proxy, or Jellyfin plugin is needed after installation.** The 3DS connects to the Jellyfin server itself. The on-device implementation uses libcurl for the Jellyfin API, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes it with the FFmpeg/MVD path from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and sends audio to NDSP.
 
 **Targets original and New Nintendo 3DS models.** Original 3DS/3DS XL/2DS use software H.264 decoding with a server transcode capped at 256×144 and 12 fps. New 3DS/XL/LL and New 2DS XL use MVD hardware decoding at up to 400×240 and 24 fps. Original-model playback performance and the repaired CIA still need physical-console validation.
 
-## v0.2.1 repair
+## v0.2.2 playback and browsing update
 
-The v0.2.0 CIA omitted the DSP RAM mapping. The reported ARM11 write fault at `0x00428ed8` resolves to `ndspSetCounter`, writing inside that unmapped region. This version adds the mapping and checks it before audio initialization. It also adds a named HOME Menu banner, an original chime, a startup splash, a software decoder for original systems, matching FFmpeg enum sizes, and safer video-buffer handoffs.
+Repairs the MVD input-address path implicated by the reported system-service crash, submits separate bounded NAL units, and rejects oversized packets instead of truncating them. The DSP startup mapping fix remains included.
+
+Browse vertically with Up/Down, the lower-screen arrows, or a vertical swipe. Tap a row to preview its artwork and tap it again (or press A) to open it. Selected-item artwork is fetched directly from Jellyfin after selection settles, with a placeholder for missing images. Video keeps priority on the top screen while playing. Lists retain only a five-row window and artwork is limited to one 256×144 texture.
+
+The new playback repair still requires physical-console retesting.
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.1` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.2` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.1" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.2/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.2" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.2/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

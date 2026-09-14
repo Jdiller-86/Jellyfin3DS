@@ -18,7 +18,13 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define APP_VERSION "0.2.0"
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_NO_STDIO
+#define STBI_MAX_DIMENSIONS 512
+#include "util/stb_image.h"
+
+#define APP_VERSION "0.2.2"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -449,6 +455,8 @@ static cJSON *compact_item(const cJSON *source) {
   cJSON_AddStringToObject(item, "id", id);
   cJSON_AddStringToObject(item, "name", short_name);
   cJSON_AddStringToObject(item, "type", type);
+  const char *series = json_string(source, "SeriesId");
+  if (valid_id(series)) cJSON_AddStringToObject(item, "artId", series);
   cJSON_AddBoolToObject(item, "folder", item_is_folder(type));
   cJSON_AddNumberToObject(item, "seconds", runtime_ticks > 0 ? runtime_ticks / 10000000.0 : 0);
   cJSON_AddNumberToObject(item, "resume", resume_ticks > 0 ? resume_ticks / 10000000.0 : 0);
@@ -634,6 +642,53 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   return true;
 }
 
+/* Artwork is fetched only after selection settles; failures are a normal placeholder. */
+static bool art_command(const cJSON *command, cJSON **result) {
+  *result = cJSON_CreateObject();
+  cJSON_AddNumberToObject(*result, "handle", -1);
+  const char *id = json_string(command, "id");
+  if (!authenticated() || !valid_id(id)) return true;
+  char suffix[256], url[SERVER_MAX + 256], token[320];
+  snprintf(token, sizeof token, "X-Emby-Token: %s", config.token);
+  for (int kind = 0; kind < 2; ++kind) {
+    snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=png", id, kind ? "Primary" : "Backdrop");
+    if (!make_url(url, sizeof url, config.server, suffix)) break;
+    CURL *curl = curl_easy_init();
+    if (!curl) break;
+    HttpBody body = {0};
+    struct curl_slist *headers = curl_slist_append(NULL, token);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 2500L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/cacert.pem");
+    CURLcode code = curl_easy_perform(curl);
+    long status = 0; curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_easy_cleanup(curl); curl_slist_free_all(headers);
+    int w = 0, h = 0, channels = 0;
+    uint8_t *pixels = NULL;
+    if (code == CURLE_OK && status == 200 && body.data &&
+        stbi_info_from_memory((uint8_t *)body.data, body.size, &w, &h, &channels) &&
+        w > 0 && h > 0 && w <= 256 && h <= 144)
+      pixels = stbi_load_from_memory((uint8_t *)body.data, body.size, &w, &h, &channels, 4);
+    free(body.data);
+    if (!pixels) continue;
+    int handle = direct_art_upload(pixels, w, h);
+    cJSON_ReplaceItemInObject(*result, "handle", cJSON_CreateNumber(handle));
+    cJSON_AddNumberToObject(*result, "width", w);
+    cJSON_AddNumberToObject(*result, "height", h);
+    break;
+  }
+  return true;
+}
+
 static cJSON *ok_result(void) {
   cJSON *result = cJSON_CreateObject();
   cJSON_AddBoolToObject(result, "ok", true);
@@ -673,6 +728,7 @@ static bool command_handle(const cJSON *command, cJSON **result, char *error,
     *result = hello_result(true);
     return true;
   }
+  if (strcmp(type, "art") == 0) return art_command(command, result);
   if (strcmp(type, "list") == 0)
     return list_command(command, result, error, error_capacity);
   if (strcmp(type, "play") == 0)

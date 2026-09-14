@@ -143,7 +143,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.1\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.2\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -161,7 +161,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(ELF):",
-    `$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(BUILD)/media.o: /out/native/media.c /out/native/direct_media.h $(SOURCE)/media.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/offload.o: /out/native/offload.c /out/native/direct_media.h $(SOURCE)/offload.h $(SOURCE)/offload_queue.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/video_player.o: /out/.pocket/native/generated/video_player.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/mvd_decode.o: /out/vendor/jellyfin-3ds/src/video/mvd_decode.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/ffmpeg_demux.o: /out/vendor/jellyfin-3ds/src/video/ffmpeg_demux.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/fake_pthread.o: /out/vendor/jellyfin-3ds/src/video/fake_pthread.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/cJSON.o: /out/vendor/jellyfin-3ds/src/api/cJSON.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/log.o: /out/vendor/jellyfin-3ds/src/util/log.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n\n$(ELF):`,
+    `$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(BUILD)/media.o: /out/native/media.c /out/native/direct_media.h $(SOURCE)/media.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/offload.o: /out/native/offload.c /out/native/direct_media.h $(SOURCE)/offload.h $(SOURCE)/offload_queue.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/video_player.o: /out/.pocket/native/generated/video_player.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/mvd_decode.o: /out/native/mvd_decode.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/ffmpeg_demux.o: /out/vendor/jellyfin-3ds/src/video/ffmpeg_demux.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/fake_pthread.o: /out/vendor/jellyfin-3ds/src/video/fake_pthread.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/cJSON.o: /out/vendor/jellyfin-3ds/src/api/cJSON.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/log.o: /out/vendor/jellyfin-3ds/src/util/log.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n\n$(ELF):`,
     "native compile rules",
   );
   source = replaceOne(

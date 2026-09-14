@@ -34,7 +34,7 @@ function App() {
   const [providerReady, setProviderReady] = createSignal(false);
   const [authenticated, setAuthenticated] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
-  const [message, setMessage] = createSignal("Starting the on-device Jellyfin service...");
+  const [message, setMessage] = createSignal("Starting…");
   const [server, setServer] = createSignal("http://");
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
@@ -53,6 +53,10 @@ function App() {
   let session = 0;
   let operation = 0;
   let plane: NodeMirror | undefined;
+  let artPlane: NodeMirror | undefined;
+  const [art, setArt] = createSignal<{handle:number;width:number;height:number}>();
+  let artWanted = "", artAge = 0, artPending = false, dragY = 0;
+
 
   const searchOsk = createOsk({
     value: query,
@@ -86,7 +90,7 @@ function App() {
 
   function command(commandValue: unknown, done: (value: any) => void, foreground = true) {
     if (!rpc.connected()) {
-      setMessage("The on-device service is still starting. Try again shortly.");
+      setMessage("Starting…");
       return;
     }
     const owner = foreground ? ++operation : operation;
@@ -111,22 +115,22 @@ function App() {
         if (foreground) setMessage("");
         done(value);
       } catch {
-        setMessage("The on-device service returned an invalid response.");
+        setMessage("Invalid server response.");
       }
     });
     if (!id) {
       if (foreground) setBusy(false);
-      setMessage("The on-device service is busy. Try again.");
+      setMessage("Busy. Try again.");
     }
   }
 
-  function load(location: Location) {
+  function load(location: Location, selectedIndex = 0) {
     if (busy() || !authenticated()) return;
     command({ t: "list", ...location }, (data: Page) => {
       setScreen("browser");
       setWhere(location);
       setPage(data);
-      setIndex(0);
+      setIndex(Math.min(selectedIndex, Math.max(0, data.items.length - 1)));
       setDetail(undefined);
       setControls(false);
     });
@@ -180,7 +184,7 @@ function App() {
       setPage({ items: [], total: 0, offset: 0 });
       setScreen("setup");
       setSetupField(0);
-      setMessage("Signed out. The saved password was never stored.");
+      setMessage("Signed out.");
     });
   }
 
@@ -281,10 +285,13 @@ function App() {
     else home("libraries");
   }
 
-  function turn(delta: number) {
-    const current = page();
-    const next = current.offset + delta * PAGE_SIZE;
-    if (!busy() && next >= 0 && next < current.total) load({ ...where(), offset: next });
+  function move(delta: number) {
+    if (busy() || screen() !== "browser" || controls() || detail()) return;
+    const next = index() + delta;
+    if (next >= 0 && next < page().items.length) { setIndex(next); return; }
+    const offset = page().offset + delta;
+    if (offset >= 0 && offset + (delta > 0 ? PAGE_SIZE - 1 : 0) < page().total)
+      load({ ...where(), offset }, delta > 0 ? PAGE_SIZE - 1 : 0);
   }
 
   function changeVolume(delta: number) {
@@ -294,14 +301,14 @@ function App() {
 
   onButtonPress(BTN.UP, () => {
     if (screen() === "setup") setSetupField(Math.max(0, setupField() - 1));
-    else if (!controls() && !detail()) setIndex(Math.max(0, index() - 1));
+    else if (!controls() && !detail()) move(-1);
   });
   onButtonPress(BTN.DOWN, () => {
     if (screen() === "setup") setSetupField(Math.min(authenticated() ? 4 : 3, setupField() + 1));
-    else if (!controls() && !detail()) setIndex(Math.min(page().items.length - 1, index() + 1));
+    else if (!controls() && !detail()) move(1);
   });
-  onButtonPress(BTN.LEFT, () => screen() === "browser" && (controls() ? seek(-10) : turn(-1)));
-  onButtonPress(BTN.RIGHT, () => screen() === "browser" && (controls() ? seek(10) : turn(1)));
+  onButtonPress(BTN.LEFT, () => screen() === "browser" && (controls() && seek(-10)));
+  onButtonPress(BTN.RIGHT, () => screen() === "browser" && (controls() && seek(10)));
   onButtonPress(BTN.CIRCLE, () => {
     if (screen() === "setup") editSetupField();
     else if (controls()) pause();
@@ -318,6 +325,12 @@ function App() {
 
   createGesture({
     surface: "auxiliary",
+    onPanStart: () => { dragY = 0; },
+    onPanMove: (contact) => {
+      if (anyOsk() || contact.startY < 48 || contact.startY >= 188) return;
+      dragY += contact.fdy;
+      if (Math.abs(dragY) >= 24) { move(dragY < 0 ? 1 : -1); dragY = 0; }
+    },
     onTap: (contact) => {
       if (anyOsk() || busy()) return;
       if (screen() === "setup") {
@@ -363,18 +376,42 @@ function App() {
       }
       if (contact.y >= 48 && contact.y < 188) {
         const item = page().items[Math.floor((contact.y - 48) / 28)];
-        if (item) open(item);
+        if (item) {
+          const row = Math.floor((contact.y - 48) / 28);
+          if (row === index()) open(item); else setIndex(row);
+        }
       }
       if (contact.y >= 192 && contact.y < 220) {
-        if (contact.x < 105) turn(-1);
+        if (contact.x < 105) move(-1);
         else if (contact.x < 215) back();
-        else turn(1);
+        else move(1);
       }
     },
   });
 
   onFrame(() => {
     frame++;
+    const wanted = !playing() && screen() === "browser" ? (selected()?.artId ?? selected()?.id ?? "") : "";
+    if (wanted !== artWanted) { artWanted = wanted; artAge = 0; setArt(undefined); }
+    artAge++;
+    if (wanted && artAge === 24 && !artPending && !busy() && rpc.connected()) {
+      artPending = true;
+      const key = wanted;
+      const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key}), result => {
+        artPending = false;
+        if (key !== artWanted || !result.ok) return;
+        try {
+          const value = JSON.parse(result.value);
+          if (value.handle >= 0 && value.width > 0 && value.height > 0) {
+            setArt(value);
+            if (artPlane) getOps().setImage(artPlane.id, value.handle);
+          }
+        } catch { /* Keep the placeholder when artwork is missing. */ }
+      });
+      if (!request) artPending = false;
+    }
+    if (wanted && !art() && (artPending || busy()) && artAge >= 24) artAge = 23;
+
     const current = rpc.session();
     if (current !== session) {
       operation++;
@@ -399,7 +436,7 @@ function App() {
         });
       } else {
         setScreen("boot");
-        setMessage("The on-device Jellyfin service is unavailable.");
+        setMessage("Service unavailable.");
       }
     }
     if (frame % 6 === 0 && playing()) {
@@ -450,34 +487,27 @@ function App() {
         class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-white border border-[#c4cbd1]"
         style={{ opacity: !playing() && screen() === "setup" ? 1 : 0 }}
       >
-          <Text class="absolute left-[14] top-[14] text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
-          <Text class="absolute left-[14] top-[42] text-lg text-[#3c4954] font-bold">Internet Settings</Text>
-          <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#00b6e7]" />
-          <Text class="absolute left-[14] top-[94] text-base text-[#3c4954]">Connect this system directly to Jellyfin.</Text>
-          <Text class="absolute left-[14] top-[124] text-xs text-[#6a7680]">Only your 3DS and Jellyfin server are needed.</Text>
-          <Text class="absolute left-[14] top-[145] text-xs text-[#6a7680]">Your password is used for sign-in, then discarded.</Text>
-          <Text class="absolute left-[14] top-[169] text-sm text-[#008ab3]">Trusted HTTPS or local-network HTTP</Text>
+          <Text class="absolute left-[14] top-[14] text-sm text-[#75409b] font-bold">Jellyfin3DS</Text>
+          <Text class="absolute left-[14] top-[42] text-lg text-[#3c4954] font-bold">Account</Text>
+          <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#aa5cc3]" />
+          <Text class="absolute left-[14] top-[94] text-base text-[#3c4954]">Sign in below.</Text>
       </View>
       <Show when={!playing() && screen() === "browser"}>
-        <View class="absolute left-[12] top-[12] right-[12] bottom-[42] p-[12] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-2">
-          <Text class="text-sm text-[#008ab3] font-bold">Jellyfin3DS</Text>
-          <Text class="text-lg text-[#3c4954] font-bold">Select something to watch</Text>
-          <View class="h-[2] w-[72] bg-[#00b6e7]" />
-          <Text class="text-base text-[#3c4954]">{selected()?.name ?? "Your Jellyfin library"}</Text>
-          <Text class="text-sm text-[#6a7680]">{selected()
-            ? `${selected()!.type}${selected()!.year ? ` / ${selected()!.year}` : ""}${selected()!.seconds ? ` / ${time(selected()!.seconds)}` : ""}`
-            : `Connected directly to ${server()}`}</Text>
-          <Text class="text-sm text-[#008ab3]">{selected()?.resume
-            ? `Resume at ${time(selected()!.resume)}` : selected()?.played ? "Watched" : ""}</Text>
+        <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
+          <View class="absolute left-[59] top-[6] w-[256] h-[144] rounded-lg bg-[#edf3f6] items-center justify-center">
+            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : "Jellyfin3DS"}</Text>
+          </View>
+          <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
+            class="absolute" style={{insetL:59+(256-(art()?.width ?? 256))/2,insetT:6+(144-(art()?.height ?? 144))/2,width:art()?.width ?? 256,height:art()?.height ?? 144,opacity:art()?1:0}} />
+          <Text class="absolute left-[12] top-[158] text-base text-[#3c4954] font-bold">{label(selected()?.name ?? "Library")}</Text>
+          <Text class="absolute left-[12] top-[184] text-xs text-[#75409b]">{selected() ? `${selected()!.type}${selected()!.year ? ` / ${selected()!.year}` : ""}${selected()!.resume ? ` / Resume ${time(selected()!.resume)}` : ""}` : "Select an item"}</Text>
         </View>
-        <Text class="absolute left-[22] bottom-[15] text-xs text-[#6a7680]">Video quality adjusts to your 3DS model.</Text>
       </Show>
       <Show when={screen() === "boot"}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-2">
           <Text class="text-lg text-[#3c4954] font-bold">Jellyfin3DS</Text>
-          <View class="w-[64] h-[48] rounded-xl bg-[#00a8d7] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
-          <Text class="text-sm text-[#008ab3]">Your library, in your hands.</Text>
-          <Text class="text-xs text-[#6a7680]">Starting Jellyfin3DS...</Text>
+          <View class="w-[64] h-[48] rounded-xl bg-[#aa5cc3] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
+          <Text class="text-xs text-[#6a7680]">Starting…</Text>
         </View>
       </Show>
       <Show when={message() && message() !== "Working..." && (!playing() || status()?.phase === "error")}>
@@ -485,71 +515,73 @@ function App() {
       </Show>
       <Show when={searchOsk.isOpen() && !playing()}>
         <View class="absolute left-[12] right-[12] top-[12] bottom-[42] p-[16] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-3">
-          <Text class="text-lg text-[#008ab3] font-bold">Search your library</Text>
-          <Text class="text-base text-[#3c4954]">{query() || "Enter a movie, series or episode."}</Text>
-          <Text class="text-xs text-[#6a7680]">Touch the keys, or use D-pad and A. START searches.</Text>
+          <Text class="text-lg text-[#75409b] font-bold">Search</Text>
+          <Text class="text-base text-[#3c4954]">{query() || "Movie, show or episode"}</Text>
+          <Text class="text-xs text-[#6a7680]">START: Search</Text>
         </View>
       </Show>
       <Show when={anyOsk() && screen() === "setup"}>
         <View class="absolute left-[12] right-[12] top-[12] bottom-[18] p-[16] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-3">
-          <Text class="text-lg text-[#008ab3] font-bold">{serverOsk.isOpen() ? "Jellyfin server" : usernameOsk.isOpen() ? "Username" : "Password"}</Text>
+          <Text class="text-lg text-[#75409b] font-bold">{serverOsk.isOpen() ? "Jellyfin server" : usernameOsk.isOpen() ? "Username" : "Password"}</Text>
           <Text class="text-base text-[#3c4954]">{serverOsk.isOpen() ? server() : usernameOsk.isOpen() ? username() : passwordLabel()}</Text>
-          <Text class="text-xs text-[#6a7680]">START accepts. B closes the keyboard.</Text>
+          <Text class="text-xs text-[#6a7680]">START: Done   B: Cancel</Text>
         </View>
       </Show>
       <Show when={playing() && !(status()?.presentedFrames)}>
-        <View class="absolute inset-0 items-center justify-center"><Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering video..."}</Text></View>
+        <View class="absolute inset-0 items-center justify-center"><Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text></View>
       </Show>
     </View>
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup" && !anyOsk()}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Jellyfin Connection Settings</Text></View>
-        <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
+        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account</Text></View>
+        <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
         </View>
-        <View class={setupField() === 1 ? "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg" : "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
+        <View class={setupField() === 1 ? "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Username</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{username() || "Enter username"}</Text>
         </View>
-        <View class={setupField() === 2 ? "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg" : "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Password (not saved)</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{passwordLabel()}</Text>
+        <View class={setupField() === 2 ? "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
+          <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Password</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{passwordLabel()}</Text>
         </View>
         <View class={authenticated()
           ? setupField() === 3
-            ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg"
-            : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"
+            ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
+            : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"
           : setupField() === 3
-            ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg"
-            : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"}>
+            ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
+            : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}>
           <Text class="text-sm text-[#3c4954] font-bold">Sign in [A]</Text>
         </View>
         <Show when={authenticated()}><View class={setupField() === 4 ? "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#fff1f1] to-[#f3d2d2] border-2 border-[#cf5a5a] rounded-lg" : "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#704040]">Sign out</Text></View></Show>
-        <Text class="absolute left-[8] top-[222] text-xs text-[#6a7680]">{authenticated() ? "B: Back without changes" : providerReady() ? "Direct service ready" : "Starting service"}</Text>
+        <Text class="absolute left-[8] top-[222] text-xs text-[#6a7680]">{authenticated() ? "B: Back" : providerReady() ? "A: Edit" : "Starting…"}</Text>
       </Show>
 
       <Show when={screen() === "browser"}>
         <View class="absolute left-0 top-0 w-full h-[32] flex-row items-center justify-around bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]">
-          <Text class="text-xs text-[#3c4954] font-bold">Libraries</Text><Text class="text-xs text-[#3c4954] font-bold">Continue</Text><Text class="text-xs text-[#008ab3] font-bold">Search</Text><Text class="text-xs text-[#3c4954] font-bold">Account</Text>
+          <Text class="text-xs text-[#3c4954] font-bold">Libraries</Text><Text class="text-xs text-[#3c4954] font-bold">Continue</Text><Text class="text-xs text-[#75409b] font-bold">Search</Text><Text class="text-xs text-[#3c4954] font-bold">Account</Text>
         </View>
         <Show when={!controls() && !detail()}>
           <Text class="absolute left-[8] top-[33] text-xs text-[#6a7680]">{label(where().title)}</Text>
-          <For each={page().items}>{(item, row) => <View style={{ insetT: 48 + row() * 28 }} class={row() === index() ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#e8fbff] to-[#c8f0fa] border-2 border-[#00b6e7] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
+          <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#dde5eb]" />
+          <View class="absolute right-[1] w-[3] h-[12] bg-[#aa5cc3]" style={{insetT:48+128*(page().offset+index())/Math.max(1,page().total-1)}} />
+          <For each={page().items}>{(item, row) => <View style={{ insetT: 48 + row() * 28 }} class={row() === index() ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
             <Text class="absolute left-[6] top-[5] text-xs text-[#3c4954]">{item.folder ? "> " : "  "}{label(item.name)}</Text>
           </View>}</For>
-          <Show when={!page().items.length}><Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{providerReady() ? "No videos here. Try another library." : "Starting on-device service..."}</Text></Show>
-          <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-xs text-[#3c4954]">Prev</Text><Text class="text-xs text-[#3c4954]">Back [B]</Text><Text class="text-xs text-[#3c4954]">Next</Text></View>
+          <Show when={!page().items.length}><Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{providerReady() ? "No items" : "Starting…"}</Text></Show>
+          <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-xs text-[#3c4954]">Up</Text><Text class="text-xs text-[#3c4954]">Back [B]</Text><Text class="text-xs text-[#3c4954]">Down</Text></View>
         </Show>
         <Show when={detail() && !controls()}>
           <Text class="absolute left-[10] top-[43] text-xs text-[#3c4954]">{label(detail()!.name)}</Text>
-          <View class="absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] rounded-lg"><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
-          <View class="absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Play from beginning</Text></View>
+          <View class="absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
+          <View class="absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Start over</Text></View>
           <View class="absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Back [B]</Text></View>
         </Show>
         <Show when={controls()}>
           <Text class="absolute left-[10] top-[40] text-xs text-[#3c4954]">{label(playing()?.name ?? "")}</Text>
-          <Text class="absolute left-[10] top-[61] text-xs text-[#008ab3]">{time((status()?.positionMs ?? 0) / 1000)} / {time(playing()?.seconds ?? 0)} - {status()?.phase ?? "opening"}</Text>
-          <View class="absolute left-[8] right-[8] top-[82] h-[44] bg-gradient-to-b from-[#e6faff] to-[#b9eaf6] border border-[#13a8cf] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">-10s</Text><Text class="text-sm text-[#3c4954]">{status()?.phase === "paused" ? "Resume" : "Pause"}</Text><Text class="text-sm text-[#3c4954]">+10s</Text></View>
-          <View class="absolute left-[8] right-[8] top-[134] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Vol -</Text><Text class="text-sm text-[#008ab3]">{Math.round(volume() * 100)}%</Text><Text class="text-sm text-[#3c4954]">Vol +</Text></View>
+          <Text class="absolute left-[10] top-[61] text-xs text-[#75409b]">{time((status()?.positionMs ?? 0) / 1000)} / {time(playing()?.seconds ?? 0)} - {status()?.phase ?? "opening"}</Text>
+          <View class="absolute left-[8] right-[8] top-[82] h-[44] bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">-10s</Text><Text class="text-sm text-[#3c4954]">{status()?.phase === "paused" ? "Resume" : "Pause"}</Text><Text class="text-sm text-[#3c4954]">+10s</Text></View>
+          <View class="absolute left-[8] right-[8] top-[134] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Vol -</Text><Text class="text-sm text-[#75409b]">{Math.round(volume() * 100)}%</Text><Text class="text-sm text-[#3c4954]">Vol +</Text></View>
           <View class="absolute left-[8] right-[8] top-[180] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Browse</Text><Text class="text-sm text-[#3c4954]">Stop</Text></View>
         </Show>
         <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || "A: Open / X: Search / SELECT: Account")}</Text>

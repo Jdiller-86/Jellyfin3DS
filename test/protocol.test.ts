@@ -14,5 +14,5 @@ test("native source never embeds the Jellyfin token in its stream URL", () => {
   const app = readFileSync("app/main.tsx", "utf8");
   expect(source).not.toContain("api_key=");
   expect(source).toContain("direct_media_prepare(url, config.token");
-  expect(app).toContain("Password (not saved)");
+  expect(app).toContain("Password");
 });

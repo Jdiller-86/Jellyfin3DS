@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.2/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -31,11 +31,11 @@ For a HOME Menu entry, copy `cias/Jellyfin3DS.cia` to the SD card, then choose *
 
 If audio DSP firmware is absent, open Rosalina with L + Down + SELECT and choose **Miscellaneous options → Dump DSP firmware**. This creates `/3ds/dspfirm.cdc`. Do not download another console's firmware.
 
-Upgrading from v0.2.0: install the v0.2.1 CIA over the existing title using FBI. The title ID is unchanged, and the SD-card connection settings are retained. The HOME Menu title is **Jellyfin3DS**, with a silver/cyan banner and a short chime.
+Upgrading from v0.2.0 or v0.2.1: install the v0.2.2 CIA over the existing title using FBI. The title ID is unchanged, and the SD-card connection settings are retained. The HOME Menu title is **Jellyfin3DS**, with a silver/purple banner and a short chime.
 
 ## 2. Sign in on the 3DS
 
-Launch Jellyfin3DS and complete **Jellyfin Connection Settings** on the lower screen:
+Launch Jellyfin3DS and complete **Account** on the lower screen:
 
 1. Enter the full server URL, including `http://` or `https://`, port, and any reverse-proxy path. Example: `http://192.168.1.20:8096`.
 2. Enter the Jellyfin username.
@@ -52,13 +52,14 @@ For HTTPS, the certificate must chain to a public CA included in the app. Self-s
 | D-pad Up/Down | Select a list or settings row |
 | A | Edit/confirm; open folder/details; play; pause in controls |
 | B | Back; close the keyboard |
-| Left/Right | Previous/next page; seek in player controls |
+| Up/Down or vertical swipe | Move through the library vertically |
+| Left/Right | Seek in player controls |
 | X | Open search; START submits the keyboard |
 | Y | Continue watching |
 | SELECT | Open Account, or switch back to active player controls |
 | START | Pause/resume during playback |
 | L / R | Seek backward/forward 10 seconds |
-| Touch screen | Tabs, rows, account fields, playback, volume, and Stop |
+| Touch screen | Tap a row to preview art, tap again to open; swipe vertically to browse |
 | L + R + START | Exit the PocketJS host |
 
 Stop playback before exiting when possible so Jellyfin receives the latest resume position.
@@ -79,4 +80,4 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.1` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.2` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
