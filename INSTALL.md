@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- A **New 3DS / New 3DS XL (LL) / New 2DS XL** with custom firmware, Wi-Fi, and DSP firmware on the SD card
+- An **original 3DS / 3DS XL / 2DS or New 3DS / New 3DS XL (LL) / New 2DS XL** with custom firmware, Wi-Fi, and DSP firmware on the SD card
 - Homebrew Launcher for the `.3dsx`, or FBI for the `.cia`
 - A reachable Jellyfin server with transcoding enabled for your user
 - The Jellyfin server URL, username, and password
@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -30,6 +30,8 @@ For Homebrew Launcher, copy the extracted `3ds` directory to the SD-card root. T
 For a HOME Menu entry, copy `cias/Jellyfin3DS.cia` to the SD card, then choose **FBI → SD → cias → Jellyfin3DS.cia → Install CIA**. Only one launch method is needed.
 
 If audio DSP firmware is absent, open Rosalina with L + Down + SELECT and choose **Miscellaneous options → Dump DSP firmware**. This creates `/3ds/dspfirm.cdc`. Do not download another console's firmware.
+
+Upgrading from v0.2.0: install the v0.2.1 CIA over the existing title using FBI. The title ID is unchanged, and the SD-card connection settings are retained. The HOME Menu title is **Jellyfin3DS**, with a silver/cyan banner and a short chime.
 
 ## 2. Sign in on the 3DS
 
@@ -69,12 +71,12 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **Username or password is incorrect:** reopen Account and enter the credentials again. The password is not stored.
 
-**Video could not start / hardware decoder unavailable:** playback requires a New 3DS-family system. Emulator MVD support varies.
+**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Original models request 256×144 at 12 fps for software decoding; New models request up to 400×240 at 24 fps for MVD. Emulator MVD support varies. Original-model performance is experimental.
 
 **Audio output unavailable:** dump DSP firmware with Rosalina, then restart the application.
 
 **Demux, decode, or buffering error:** confirm the item is playable by that Jellyfin user and the server can transcode it to H.264/AAC MPEG-TS. The first version does not support live TV, DRM, subtitles, or alternate track selection.
 
-**CIA versus 3DSX:** both formats run the same direct client. Installing the CIA does not change the New 3DS, DSP, network, or server-transcoding requirements.
+**CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.0` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.1` release is publicly accessible. FBI cannot authenticate to a private GitHub release.

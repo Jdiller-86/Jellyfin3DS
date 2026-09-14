@@ -471,7 +471,6 @@ static bool list_command(const cJSON *command, cJSON **result, char *error,
   }
 
   char suffix[1536];
-  bool mvd = direct_media_has_mvd();
   int local_offset = 0;
   if (strcmp(mode, "libraries") == 0) {
     snprintf(suffix, sizeof suffix, "/Users/%s/Views", config.user_id);
@@ -600,6 +599,7 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   u64 tick = svcGetSystemTick();
   snprintf(playing_session, sizeof playing_session, "j3ds%08lx",
            (unsigned long)(u32)(tick & 0xffffffffu));
+  bool mvd = direct_media_has_mvd();
   char suffix[1536];
   int written = snprintf(suffix, sizeof suffix,
     "/Videos/%s/stream?UserId=%s&DeviceId=%s&MediaSourceId=%s"

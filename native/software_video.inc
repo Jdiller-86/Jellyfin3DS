@@ -2,6 +2,8 @@
  * FFmpeg is single-threaded here: the original console has one application CPU.
  * Jellyfin must transcode to <=256x144, 12 fps, baseline H.264, YUV420P.
  */
+_Static_assert(sizeof(enum AVColorSpace) == 4 && sizeof(enum AVCodecID) == 4,
+               "FFmpeg public enum ABI must match its 32-bit enum build");
 static unsigned char clamp_color(int x) { return x < 0 ? 0 : x > 255 ? 255 : x; }
 
 static bool software_frame(AVFrame *frame, u16 *pixels, int width, int height)
@@ -58,6 +60,7 @@ static void software_decode_thread(void)
     pixels = malloc((size_t)width * height * 2);
     if (!frame || !packet || !pixels) { error = "Not enough memory for video"; goto done; }
     fq_init(&s_vp.fq, width, height);
+    if (!s_vp.fq.popped.data) { error = "Not enough frame memory"; goto done; }
     for (int i = 0; i < FRAME_QUEUE_SIZE; ++i)
         if (!s_vp.fq.frames[i].data) { error = "Not enough frame memory"; goto done; }
     s_vp.display_width = width;

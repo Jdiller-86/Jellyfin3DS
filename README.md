@@ -4,15 +4,19 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **No companion computer, phone, proxy, or Jellyfin plugin is needed after installation.** The 3DS connects to the Jellyfin server itself. The on-device implementation uses libcurl for the Jellyfin API, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes it with the FFmpeg/MVD path from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and sends audio to NDSP.
 
-**Video requires a New Nintendo 3DS, New 3DS XL/LL, or New 2DS XL.** Original 3DS/3DS XL/2DS systems do not provide the MVD H.264 decoder. This remains an experimental client and has not yet been certified on physical hardware.
+**Targets original and New Nintendo 3DS models.** Original 3DS/3DS XL/2DS use software H.264 decoding with a server transcode capped at 256×144 and 12 fps. New 3DS/XL/LL and New 2DS XL use MVD hardware decoding at up to 400×240 and 24 fps. Original-model playback performance and the repaired CIA still need physical-console validation.
+
+## v0.2.1 repair
+
+The v0.2.0 CIA omitted the DSP RAM mapping. The reported ARM11 write fault at `0x00428ed8` resolves to `ndspSetCounter`, writing inside that unmapped region. This version adds the mapping and checks it before audio initialization. It also adds a named HOME Menu banner, an original chime, a startup splash, a software decoder for original systems, matching FFmpeg enum sizes, and safer video-buffer handoffs.
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.0` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.1` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.0" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.1" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.0/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.1/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 
@@ -52,7 +56,7 @@ CI uses Bun 1.4.2, PocketJS commit `a5a85356e172db8a32aefa983ee1259f60406f69`, b
 ## Current scope
 
 - Default video and audio tracks; no subtitle picker or burn-in, media-version picker, live TV, DRM, offline downloads, music-only player, or stereoscopic playback.
-- Jellyfin transcodes to H.264 Baseline Level 3.1, AAC stereo, MPEG-TS, at up to 400×240. Server transcoding must be enabled for the user.
+- Jellyfin transcodes to H.264 Baseline Level 3.1, AAC stereo, MPEG-TS, with model-specific size and frame-rate limits. Server transcoding must be enabled for the user.
 - Reverse-proxy base paths such as `https://media.example/jellyfin` are supported. HTTP redirects are not.
 - Browse remains available while a video runs on the upper screen; SELECT returns to player controls.
 - Progress is reported on playback start, pause/resume, about every five seconds, and stop. Power loss can lose the latest position.

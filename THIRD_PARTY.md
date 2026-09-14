@@ -9,3 +9,5 @@ Jellyfin3DS is independent and unofficial. It is not endorsed by Jellyfin or Nin
 - libcurl, mbedTLS, zlib, devkitARM, libctru, citro2d, and citro3d are supplied by the pinned devkitPro toolchain and retain their own licenses.
 
 This combined program is distributed under GPL-3.0. The complete GPL text is at `vendor/jellyfin-3ds/LICENSE` and is copied into install artifacts as `licenses/GPL-3.0.txt`.
+
+- [3ds-bannertool](https://github.com/carstene1ns/3ds-bannertool), originally by Steveice10, is pinned at `734d33be79fd3f8c29c6296158f06ac7c5ca9dcb` to generate the HOME Menu banner. Its MIT license is included with the install package. Banner artwork and synthesized audio are original to this project.

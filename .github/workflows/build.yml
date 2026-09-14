@@ -39,12 +39,12 @@ jobs:
           rustup target add wasm32-unknown-unknown
           bun run test:ui
       - run: bun run build
+      - run: python3 scripts/verify-cia.py dist/3ds/Jellyfin3DS.cia
       - name: Preserve native crash symbols
         run: |
           mkdir -p dist/debug
           cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.elf dist/debug/
           cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.map dist/debug/
-          docker run --rm -v "$PWD/dist/debug:/debug" devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5 /opt/devkitpro/devkitARM/bin/arm-none-eabi-addr2line -a -f -C -e /debug/pocketjs-3ds.elf 0x00428ed8 0x0042c1bc 0x0045cf1c
       - uses: actions/upload-artifact@v4
         with:
           name: Jellyfin3DS-debug
@@ -58,7 +58,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/pocketjs-client')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -67,26 +67,23 @@ jobs:
         with:
           name: Jellyfin3DS-install
           path: dist/install
-      - name: Publish the FBI-installable v0.2.0 prerelease
+      - name: Publish the FBI-installable v0.2.1 prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          release_notes='Experimental PocketJS build. Physical New 3DS and Jellyfin-server validation is still required; see VALIDATION.md.'
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            gh release upload v0.2.0 \
-              dist/install/cias/Jellyfin3DS.cia \
-              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
-              dist/install/SHA256SUMS --clobber
-            gh release edit v0.2.0 --prerelease --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
-          else
-            gh release create v0.2.0 \
-              dist/install/cias/Jellyfin3DS.cia \
-              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
-              dist/install/SHA256SUMS \
-              --prerelease --target "$GITHUB_SHA" \
-              --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
+          release_notes='Experimental v0.2.1: fixes the missing CIA DSP memory mapping; adds Jellyfin3DS HOME Menu banner/chime and original-model software decoding (256x144, 12 fps). Physical original/New 3DS validation is still required; see VALIDATION.md.'
+          if gh release view v0.2.1 >/dev/null 2>&1; then
+            echo 'v0.2.1 already exists; versioned releases are immutable. Bump the version to publish another build.'
+            exit 0
           fi
+          gh release create v0.2.1 \
+            dist/install/cias/Jellyfin3DS.cia \
+            dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+            dist/install/SHA256SUMS \
+            --prerelease --target "$RELEASE_COMMIT" \
+            --title 'Jellyfin3DS v0.2.1 (experimental)' --notes "$release_notes"
           verify_dir="$(mktemp -d)"
-          gh release download v0.2.0 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          gh release download v0.2.1 --pattern Jellyfin3DS.cia --dir "$verify_dir"
           cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"
