@@ -1,0 +1,16 @@
+{
+  "name": "jellyfin3ds",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun scripts/setup.ts",
+    "native:deps": "bun scripts/native-deps.ts",
+    "build": "bun scripts/build.ts --cia",
+    "build:guest": "bun scripts/build.ts --pocket-only",
+    "test": "bun test ./test/*.test.ts",
+    "package": "bun scripts/package.ts",
+    "test:ui": "bun run build:guest && bun vendor/pocketjs/tools/wasm.ts && bun test --conditions=browser ./tests-ui/journey.test.ts",
+    "typecheck": "bun node_modules/typescript/bin/tsc --noEmit"
+  }
+}

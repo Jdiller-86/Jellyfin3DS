@@ -1,0 +1,82 @@
+name: Build 3DS homebrew
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun run setup
+      - run: bun run typecheck
+      - run: bun run test
+      - name: Install pinned Rust and devkitARM
+        run: |
+          rustup toolchain install nightly-2026-07-02 --profile minimal --component rust-src
+          docker pull devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5
+      - name: Cache native Jellyfin dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pocket/native/portlibs
+            .pocket/native/cacert.pem
+            vendor/jellyfin-3ds/lib/ffmpeg/*.a
+            vendor/jellyfin-3ds/lib/ffmpeg/include
+          key: jellyfin3ds-native-${{ hashFiles('scripts/native-deps.ts', 'vendor/jellyfin-3ds/lib/ffmpeg/build-ffmpeg.sh') }}
+      - run: bun run native:deps
+      - name: Validate rendered two-screen UI
+        run: |
+          rustup target add wasm32-unknown-unknown
+          bun run test:ui
+      - run: bun run build
+      - run: bun run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/pocketjs-client')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install
+      - name: Publish the FBI-installable v0.2.0 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          release_notes='Experimental PocketJS build. Physical New 3DS and Jellyfin-server validation is still required; see VALIDATION.md.'
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release upload v0.2.0 \
+              dist/install/cias/Jellyfin3DS.cia \
+              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+              dist/install/SHA256SUMS --clobber
+            gh release edit v0.2.0 --prerelease --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
+          else
+            gh release create v0.2.0 \
+              dist/install/cias/Jellyfin3DS.cia \
+              dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+              dist/install/SHA256SUMS \
+              --prerelease --target "$GITHUB_SHA" \
+              --title 'Jellyfin3DS v0.2.0 (experimental)' --notes "$release_notes"
+          fi
+          verify_dir="$(mktemp -d)"
+          gh release download v0.2.0 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"

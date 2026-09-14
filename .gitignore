@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.pocket/
+.pocket-build/
+dist/
+*.log
+*.swp
