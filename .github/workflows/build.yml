@@ -39,6 +39,16 @@ jobs:
           rustup target add wasm32-unknown-unknown
           bun run test:ui
       - run: bun run build
+      - name: Preserve native crash symbols
+        run: |
+          mkdir -p dist/debug
+          find . -name 'pocketjs-3ds.elf' -exec cp {} dist/debug/ \;
+          find . -name 'pocketjs-3ds.map' -exec cp {} dist/debug/ \;
+          docker run --rm -v "$PWD/dist/debug:/debug" devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5 /opt/devkitpro/devkitARM/bin/arm-none-eabi-addr2line -a -f -C -e /debug/pocketjs-3ds.elf 0x00428ed8 0x0042c1bc 0x0045cf1c
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-debug
+          path: dist/debug/
       - run: bun run package
       - uses: actions/upload-artifact@v4
         with:
@@ -48,7 +58,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/pocketjs-client')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
