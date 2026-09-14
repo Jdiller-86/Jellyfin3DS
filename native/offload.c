@@ -471,6 +471,7 @@ static bool list_command(const cJSON *command, cJSON **result, char *error,
   }
 
   char suffix[1536];
+  bool mvd = direct_media_has_mvd();
   int local_offset = 0;
   if (strcmp(mode, "libraries") == 0) {
     snprintf(suffix, sizeof suffix, "/Users/%s/Views", config.user_id);
@@ -603,11 +604,12 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   int written = snprintf(suffix, sizeof suffix,
     "/Videos/%s/stream?UserId=%s&DeviceId=%s&MediaSourceId=%s"
     "&PlaySessionId=%s&VideoCodec=h264&AudioCodec=aac&Container=ts"
-    "&TranscodingContainer=ts&TranscodingProtocol=http&MaxWidth=400&MaxHeight=240"
-    "&VideoBitRate=472000&AudioBitRate=96000&MaxAudioChannels=2"
+    "&TranscodingContainer=ts&TranscodingProtocol=http&MaxWidth=%d&MaxHeight=%d"
+    "&MaxFramerate=%d&VideoBitRate=%d&AudioBitRate=64000&MaxAudioChannels=2"
     "&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2"
     "&StartTimeTicks=%lld",
     id, config.user_id, config.device_id, id, playing_session,
+    mvd ? 400 : 256, mvd ? 240 : 144, mvd ? 24 : 12, mvd ? 472000 : 192000,
     (long long)seek_ticks);
   char url[SERVER_MAX + sizeof suffix];
   if (written <= 0 || (size_t)written >= sizeof suffix ||

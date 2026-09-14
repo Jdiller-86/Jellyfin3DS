@@ -213,7 +213,7 @@ function App() {
       setControls(true);
       setDetail(undefined);
       if (!player.open(data.source)) {
-        setMessage("Video could not start. A New 3DS and DSP firmware are required.");
+        setMessage("Video could not start. Check DSP firmware and server transcoding.");
         command({ t: "stop", seconds }, () => {}, false);
         setPlaying(undefined);
         return;
@@ -470,12 +470,14 @@ function App() {
           <Text class="text-sm text-[#008ab3]">{selected()?.resume
             ? `Resume at ${time(selected()!.resume)}` : selected()?.played ? "Watched" : ""}</Text>
         </View>
-        <Text class="absolute left-[22] bottom-[15] text-xs text-[#6a7680]">Video requires a New 3DS / New 2DS XL.</Text>
+        <Text class="absolute left-[22] bottom-[15] text-xs text-[#6a7680]">Video quality adjusts to your 3DS model.</Text>
       </Show>
       <Show when={screen() === "boot"}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-2">
           <Text class="text-lg text-[#3c4954] font-bold">Jellyfin3DS</Text>
-          <Text class="text-sm text-[#008ab3]">Starting on-device service...</Text>
+          <View class="w-[64] h-[48] rounded-xl bg-[#00a8d7] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
+          <Text class="text-sm text-[#008ab3]">Your library, in your hands.</Text>
+          <Text class="text-xs text-[#6a7680]">Starting Jellyfin3DS...</Text>
         </View>
       </Show>
       <Show when={message() && message() !== "Working..." && (!playing() || status()?.phase === "error")}>

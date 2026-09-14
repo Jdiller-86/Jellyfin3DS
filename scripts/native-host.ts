@@ -52,12 +52,29 @@ export function transformVideoHeader(source: string): string {
   return replaceOne(
     source,
     "void video_player_render_frame(void);",
-    `void video_player_render_frame(void);\n\n/* ${MARKER}: update and expose the decoder texture without issuing C2D draws. */\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale);`,
+    `void video_player_render_frame(void);\n\n/* ${MARKER}: update and expose the decoder texture without issuing C2D draws. */\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale);\nvoid video_player_present(void);`,
     "video texture accessor",
   );
 }
 
 export function transformVideoSource(source: string): string {
+  source = replaceOne(source, "        /* Wait for a frame in the queue */",
+    "        /* Do not recycle the displayed texture until the main thread has\n         * retired the GPU list and accepted the pending frame. */\n        LightLock_Lock(&s_vp.tex_lock);\n        bool pending = s_vp.new_tex_ready;\n        LightLock_Unlock(&s_vp.tex_lock);\n        if (pending) { svcSleepThread(2000000LL); continue; }\n        /* Wait for a frame in the queue */", "GPU frame handoff");
+  source = replaceOne(source, "    queued_frame_t frames[FRAME_QUEUE_SIZE];",
+    "    queued_frame_t frames[FRAME_QUEUE_SIZE];\n    queued_frame_t popped;", "queue ownership");
+  source = replaceOne(source, "    int frame_size = frame_w * frame_h * 2; /* BGR565 */",
+    "    int frame_size = frame_w * frame_h * 2; /* BGR565 */\n    fq->popped.data = linearAlloc(frame_size);", "queue scratch allocation");
+  source = replaceOne(source, "static void fq_cleanup(frame_queue_t *fq)\n{",
+    "static void fq_cleanup(frame_queue_t *fq)\n{\n    if (fq->popped.data) linearFree(fq->popped.data);\n    fq->popped.data = NULL;", "queue scratch cleanup");
+  source = replaceOne(source, "    queued_frame_t *f = &fq->frames[fq->read_idx];\n    fq->read_idx",
+    "    queued_frame_t *f = &fq->frames[fq->read_idx];\n    if (!fq->popped.data) { LightLock_Unlock(&fq->lock); return NULL; }\n    u8 *owned = fq->popped.data;\n    fq->popped = *f;\n    fq->popped.data = owned;\n    memcpy(owned, f->data, f->width * f->height * 2);\n    f = &fq->popped;\n    fq->read_idx", "queue pop owns pixels");
+  source = replaceOne(source, "    /* Init MVD */",
+    "    if (s_vp.demux.video_width <= 0 || s_vp.demux.video_width > 400 ||\n        s_vp.demux.video_height <= 0 || s_vp.demux.video_height > 240) {\n        snprintf(s_vp.error_msg, sizeof s_vp.error_msg, \"Server exceeded the video size limit\");\n        s_vp.state = VIDEO_ERROR;\n        return;\n    }\n    /* Init MVD */", "bounded hardware frames");
+  source = replaceOne(source, "#include <3ds.h>", "#include <3ds.h>\n#include <errno.h>\n#include \"direct_media.h\"", "model selection");
+  const software = readFileSync(new URL("../native/software_video.inc", import.meta.url), "utf8");
+  source = replaceOne(source, "static void decode_thread_func(void *arg)\n{\n    (void)arg;",
+    software + "\nstatic void decode_thread_func(void *arg)\n{\n    (void)arg;\n    if (!direct_media_has_mvd()) { software_decode_thread(); return; }", "software decoder");
+  source = replaceOne(source, "    return mvd_is_available();", "    return true; /* Original models use FFmpeg software decoding. */", "all model support");
   source = replaceOne(
     source,
     "    char            url[2048];\n    int64_t         duration_ticks;",
@@ -118,7 +135,7 @@ export function transformVideoSource(source: string): string {
     `                /* ${MARKER}: PocketJS samples v=0 from the high texture rows. */\n                int dst_row = 0, y_count = 0;\n                int padding = s_vp.frame_tex[write_idx].height - f->height;\n                for (int y = 0; y < padding; y++)\n                    dst_row += s_inc_y[y_count++];\n                for (int y = 0; y < f->height; y++) {\n                    const u8 *row = f->data + (f->height - 1 - y) * f->width * 2;\n                    tile_row_morton(tex_data, dst_row, row, f->width);\n                    dst_row += s_inc_y[y_count++];\n                }`,
     "video orientation",
   );
-  return `${source}\n\n/* ${MARKER}: PocketJS binds this texture in its own PICA draw list. */\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale)\n{\n    if (s_vp.state != VIDEO_PLAYING && s_vp.state != VIDEO_PAUSED) return NULL;\n    if (!s_vp.tex_initialized && s_vp.display_width > 0)\n        init_frame_texture(s_vp.display_width, s_vp.display_height);\n    LightLock_Lock(&s_vp.tex_lock);\n    if (s_vp.new_tex_ready) {\n        s_vp.frame_img.tex = &s_vp.frame_tex[s_vp.tex_display_idx];\n        s_vp.frame_img.subtex = &s_subtex;\n        s_vp.new_tex_ready = false;\n    }\n    C3D_Tex *texture = s_vp.tex_initialized ? s_vp.frame_img.tex : NULL;\n    if (texture) {\n        if (u_scale) *u_scale = (float)s_vp.display_width / (float)texture->width;\n        if (v_scale) *v_scale = (float)s_vp.display_height / (float)texture->height;\n    }\n    LightLock_Unlock(&s_vp.tex_lock);\n    return texture;\n}\n`;
+  return `${source}\n\n/* ${MARKER}: PocketJS binds this texture in its own PICA draw list. */\nstatic bool at_frame_boundary;\nvoid video_player_present(void) {\n    at_frame_boundary = true;\n    video_player_texture(NULL, NULL);\n    at_frame_boundary = false;\n}\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale)\n{\n    if (s_vp.state != VIDEO_PLAYING && s_vp.state != VIDEO_PAUSED) return NULL;\n    if (!s_vp.tex_initialized && s_vp.display_width > 0)\n        init_frame_texture(s_vp.display_width, s_vp.display_height);\n    LightLock_Lock(&s_vp.tex_lock);\n    if (at_frame_boundary && s_vp.new_tex_ready) {\n        s_vp.frame_img.tex = &s_vp.frame_tex[s_vp.tex_display_idx];\n        s_vp.frame_img.subtex = &s_subtex;\n        s_vp.new_tex_ready = false;\n    }\n    C3D_Tex *texture = s_vp.tex_initialized ? s_vp.frame_img.tex : NULL;\n    if (texture) {\n        if (u_scale) *u_scale = (float)s_vp.display_width / (float)texture->width;\n        if (v_scale) *v_scale = (float)s_vp.display_height / (float)texture->height;\n    }\n    LightLock_Unlock(&s_vp.tex_lock);\n    return texture;\n}\n`;
 }
 
 export function transformMakefile(source: string): string {
@@ -165,7 +182,16 @@ export function transformMakefile(source: string): string {
     "$(CIA): $(ELF) $(SMDH) $(ROMFS)/app.pocket $(ROMFS)/cacert.pem $(ROMFS_LAYOUT_STAMP) $(RSF) $(CIA_STAMP)",
     "CIA CA dependency",
   );
+  source = replaceOne(source, "-elf $(ELF) -icon $(SMDH)", "-elf $(ELF) -icon $(SMDH) -banner /out/.pocket/banner/banner.bnr", "HOME Menu banner");
+  source = source.replace("$(RSF) $(CIA_STAMP)\n", "$(RSF) $(CIA_STAMP) /out/.pocket/banner/banner.bnr\n");
+  // FFmpeg is built with 32-bit enums. Its public structs must use the same ABI.
+  source += "\n$(BUILD)/video_player.o $(BUILD)/ffmpeg_demux.o: CFLAGS += -fno-short-enums\n";
   return source;
+}
+
+export function transformRsf(source: string): string {
+  return replaceOne(source, "  InterruptNumbers:",
+    "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  InterruptNumbers:", "DSP RAM mapping");
 }
 
 export interface NativeHostStage { restore(): void }
@@ -196,6 +222,7 @@ export function stageNativeHost(projectRoot: string): NativeHostStage {
     { path: join(pocketHost, "src/media.h"), transform: transformMediaHeader },
     { path: join(pocketHost, "src/gfx.c"), transform: transformGfx },
     { path: join(pocketHost, "Makefile"), transform: transformMakefile },
+    { path: join(pocketHost, "app.rsf"), transform: transformRsf },
   ];
   const originals = targets.map(({ path }) => readFileSync(path, "utf8"));
   try {

@@ -37,6 +37,7 @@ static bool open_failed;
 static bool has_frame;
 static bool desired_paused;
 static bool hardware_supported;
+bool direct_media_has_mvd(void) { return hardware_supported; }
 static float desired_volume = 0.8f;
 static int32_t texture_handle = -1;
 static unsigned generation;
@@ -77,8 +78,16 @@ bool media_start(void) {
   curl_global_init(CURL_GLOBAL_DEFAULT);
   log_init();
   video_player_init();
-  hardware_supported = video_player_is_supported();
-  ndsp_result = ndspInit();
+  /* Never probe the New-only MVD service on original models. */
+  bool new_model = false;
+  APT_CheckNew3DS(&new_model);
+  hardware_supported = new_model;
+  MemInfo dsp_memory;
+  PageInfo dsp_page;
+  ndsp_result = svcQueryMemory(&dsp_memory, &dsp_page, 0x1ff50000);
+  if (R_SUCCEEDED(ndsp_result) && (dsp_memory.perm & MEMPERM_WRITE))
+    ndsp_result = ndspInit();
+  else ndsp_result = -1;
   ndsp_ready = R_SUCCEEDED(ndsp_result);
   if (ndsp_ready) ndspSetOutputMode(NDSP_OUTPUT_STEREO);
   started = true;
@@ -106,7 +115,7 @@ bool media_open(const char *host, unsigned port, const char *token) {
   (void)host;
   (void)port;
   (void)token;
-  if (!started || !ndsp_ready || !hardware_supported) return false;
+  if (!started || !ndsp_ready) return false;
 
   LightLock_Lock(&prepared_lock);
   if (!prepared.ready) {
@@ -200,6 +209,7 @@ void media_present(void) {
     ndspChnSetMix(1, mix);
   }
 
+  video_player_present();
   float u = 1.0f, v = 1.0f;
   if (video_player_texture(&u, &v)) has_frame = true;
 }
@@ -243,9 +253,6 @@ void media_snapshot(char *out, size_t capacity) {
     } else {
       copy_text(error, sizeof error, "Audio output unavailable");
     }
-  } else if (requested_open && !hardware_supported) {
-    phase = "error";
-    copy_text(error, sizeof error, "Video needs a New Nintendo 3DS or New 2DS XL");
   } else {
     safe_error(error, sizeof error, status.error_msg);
   }

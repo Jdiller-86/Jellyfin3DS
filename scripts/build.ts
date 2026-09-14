@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { appIcon } from "./icons.ts";
+import { buildBanner } from "./banner.ts";
 import { resolve } from "node:path";
 import { resolve3dsBuildPlan } from "../vendor/pocketjs/tools/3ds-profile.ts";
 import { build3ds } from "../vendor/pocketjs/tools/3ds.ts";
@@ -12,6 +13,7 @@ writeFileSync(planPath, JSON.stringify(plan));
 const iconPaths=[resolve(root,"vendor/pocketjs/hosts/3ds/icon.png"),resolve(root,"vendor/pocketjs/hosts/3ds/icon-small.png")];
 const originals=iconPaths.map(p=>readFileSync(p));
 const pocketOnly=process.argv.includes("--pocket-only");
+if (!pocketOnly) await buildBanner(root);
 const nativeStage=pocketOnly?undefined:stageNativeHost(root);
 try {
   if(!pocketOnly)iconPaths.forEach((p,i)=>writeFileSync(p,appIcon(i?24:48)));

@@ -42,8 +42,8 @@ jobs:
       - name: Preserve native crash symbols
         run: |
           mkdir -p dist/debug
-          find . -name 'pocketjs-3ds.elf' -exec cp {} dist/debug/ \;
-          find . -name 'pocketjs-3ds.map' -exec cp {} dist/debug/ \;
+          cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.elf dist/debug/
+          cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.map dist/debug/
           docker run --rm -v "$PWD/dist/debug:/debug" devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5 /opt/devkitpro/devkitARM/bin/arm-none-eabi-addr2line -a -f -C -e /debug/pocketjs-3ds.elf 0x00428ed8 0x0042c1bc 0x0045cf1c
       - uses: actions/upload-artifact@v4
         with:
