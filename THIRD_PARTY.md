@@ -11,3 +11,5 @@ Jellyfin3DS is independent and unofficial. It is not endorsed by Jellyfin or Nin
 This combined program is distributed under GPL-3.0. The complete GPL text is at `vendor/jellyfin-3ds/LICENSE` and is copied into install artifacts as `licenses/GPL-3.0.txt`.
 
 - [3ds-bannertool](https://github.com/carstene1ns/3ds-bannertool), originally by Steveice10, is pinned at `734d33be79fd3f8c29c6296158f06ac7c5ca9dcb` to generate the HOME Menu banner. Its MIT license is included with the install package. Banner artwork and synthesized audio are original to this project.
+
+- The transparent launch archive derives from the Homebrew template in [Project_CTR makerom](https://github.com/3DSGuy/Project_CTR) at `e8f5f529c54ff9b22a2491a480ffa69206bf7b19`. Its four textures are cleared while layouts and animations are retained. Reproduce with `scripts/blank-logo.py`; the MIT notice is in `assets/blank-logo-LICENSE.txt` and install packages.

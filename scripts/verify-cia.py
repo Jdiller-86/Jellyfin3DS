@@ -25,10 +25,36 @@ for i in range(10):
     if name:
         entries[name] = exefs[512+offset:512+offset+size]
 assert entries.get('banner', b'')[:4] == b'CBMD', 'HOME Menu banner missing'
-assert 'logo' not in entries and u32(ncch, 0x19C) == 0, 'Generic launch logo is still embedded'
+# Keep a valid launch archive, with transparent textures, rather than omitting it.
+expected_logo = Path('assets/blank-logo.lz').read_bytes()
+assert entries.get('logo') == expected_logo, 'Transparent ExeFS launch logo missing'
+import runpy
+logo_tools = runpy.run_path('scripts/blank-logo.py')
+archive = logo_tools['decompress'](expected_logo)
+assert logo_tools['clear_textures'](archive.copy()) == archive, 'Launch textures are visible'
+assert struct.unpack_from('<H', exheader, 0xE)[0] == 4, 'CIA revision missing'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]
 assert title == 'Jellyfin3DS', f'Unexpected HOME Menu title: {title!r}'
-assert len(entries['banner']) > 256, 'Banner is empty'
+# SMDH stores tiled RGB565 pixels; histogram checks are independent of tiling.
+for offset, pixels in ((0x2040, 24*24), (0x24C0, 48*48)):
+    colors = struct.unpack_from('<' + str(pixels) + 'H', icon, offset)
+    purple = ((0xAA >> 3) << 11) | ((0x5C >> 2) << 5) | (0xC3 >> 3)
+    assert colors.count(purple) > pixels // 5, 'Purple HOME Menu icon missing'
+banner = entries['banner']
+assert len(banner) > 256, 'Banner is empty'
+cwav_at = banner.index(b'CWAV')
+cwav = banner[cwav_at:]
+info_at, data_at = u32(cwav, 24), u32(cwav, 36)
+assert cwav[info_at:info_at+4] == b'INFO' and cwav[data_at:data_at+4] == b'DATA'
+assert cwav[info_at+8:info_at+10] == b'\x01\x00', 'Chime must be non-looping PCM16'
+assert u32(cwav, info_at+12) == 22050 and u32(cwav, info_at+20) == 44100
+assert u32(cwav, info_at+28) == 1, 'Chime must be mono'
+import wave
+with wave.open('.pocket/banner/banner.wav') as wav:
+    pcm = wav.readframes(wav.getnframes())
+assert cwav[data_at+32:data_at+32+len(pcm)] == pcm, 'Packaged chime differs from source'
+samples = struct.unpack('<' + str(len(pcm)//2) + 'h', pcm)
+assert max(map(abs, samples)) < 4096 and samples[0] == samples[-1] == 0, 'Chime level/fade regression'
 print('CIA verified: DSP mapping, Jellyfin3DS title, SMDH icon, CBMD banner')
