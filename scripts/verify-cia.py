@@ -32,7 +32,7 @@ import runpy
 logo_tools = runpy.run_path('scripts/blank-logo.py')
 archive = logo_tools['decompress'](expected_logo)
 assert logo_tools['clear_textures'](archive.copy()) == archive, 'Launch textures are visible'
-assert struct.unpack_from('<H', exheader, 0xE)[0] == 4, 'CIA revision missing'
+assert struct.unpack_from('<H', exheader, 0xE)[0] == 5, 'CIA revision missing'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]

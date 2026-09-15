@@ -143,7 +143,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.4\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.2.5\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -192,7 +192,7 @@ export function transformMakefile(source: string): string {
 
 export function transformRsf(source: string): string {
   source = replaceOne(source, "Logo                    : Homebrew", "Logo                    : None", "no Homebrew splash");
-  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 4", "CIA revision");
+  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 5", "CIA revision");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  InterruptNumbers:", "DSP RAM mapping");
 }

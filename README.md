@@ -6,7 +6,7 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **Targets original and New Nintendo 3DS models.** Original 3DS/3DS XL/2DS use software H.264 decoding with a server transcode capped at 256×144 and 12 fps. New 3DS/XL/LL and New 2DS XL use MVD hardware decoding at up to 400×240 and 24 fps. Original-model playback performance and the repaired CIA still need physical-console validation.
 
-## v0.2.4 launch repair
+## v0.2.5 launch repair
 
 Restores the launch archive removed in v0.2.3, implicated by the reported “SD card was removed” launch error. The archive retains its layouts and animations but uses fully transparent textures, so the generic Homebrew splash remains hidden. The HOME Menu has a softer, lower-volume melodic chime and the existing purple icon. Launch still needs physical-console retesting.
 
@@ -20,11 +20,11 @@ The new playback repair still requires physical-console retesting.
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.4` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.5` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.4/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.4" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.5/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.5" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.4/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.5/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

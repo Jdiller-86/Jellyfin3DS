@@ -4,7 +4,7 @@
   "id": "com.jdiller86.jellyfin3ds",
   "name": "jellyfin3ds",
   "title": "Jellyfin3DS",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "engine": {
     "capabilities": {
       "requires": [
