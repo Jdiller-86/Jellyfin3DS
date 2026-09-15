@@ -4,25 +4,23 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **No companion computer, phone, proxy, or Jellyfin plugin is needed after installation.** The 3DS connects to the Jellyfin server itself. The on-device implementation uses libcurl for the Jellyfin API, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes it with the FFmpeg/MVD path from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and sends audio to NDSP.
 
-**Targets original and New Nintendo 3DS models.** Original 3DS/3DS XL/2DS use software H.264 decoding with a server transcode capped at 256×144 and 12 fps. New 3DS/XL/LL and New 2DS XL use MVD hardware decoding at up to 400×240 and 24 fps. Original-model playback performance and the repaired CIA still need physical-console validation.
+**Targets original and New 3DS models.** This recovery build uses software H.264 decoding on both, requesting a server transcode capped at 256×144 and 12 fps. MVD is temporarily disabled because it still crashes the system service. Playback performance needs console validation.
 
-## v0.2.6 launch recovery
+## v0.2.7 search and playback recovery
 
-Removes the broken custom launch archive from v0.2.4/v0.2.5 and restores the complete, authenticated resource from the working baseline. The earlier generator changed the archive without regenerating its HMAC footer. **The generic Homebrew launch splash temporarily returns.** Hiding it remains unfinished; launch reliability takes priority.
+The search crash at PC `00430090` resolves to libctru `aptConvertScreenForCapture`: the keyboard reads VRAM at `1F4C7800`, which the prior CIA did not map. This build grants read-only access to the 6 MB VRAM range and checks it before launching the keyboard. Missing access now returns an error instead of entering the applet.
 
-The HOME Menu banner displays **v0.2.6** and includes the soft two-second melodic chime. If you still hear the old sound or cannot see that version, follow the clean reinstall instructions in [INSTALL.md](INSTALL.md). The installer keeps the existing title ID and SD configuration path.
+The native keyboard, purple UI, vertical browsing and artwork remain included. The authenticated standard Homebrew launch splash still temporarily returns; hiding it remains unfinished.
 
-Server, username, password, and search use the native 3DS software keyboard. Cancel preserves the current value; password entry is masked. Playback pauses while the applet is open. The simulated UI tests mock applet replies; the system keyboard itself requires console testing.
-
-Includes prior DSP mapping and MVD address/NAL repairs, purple styling, vertical browsing, and top-screen artwork. Physical-console launch and playback still require retesting, particularly original-model playback performance.
+The banner displays **v0.2.7**. The release includes `Jellyfin3DS-chime.wav`, an exact preview of the PCM audio embedded in the banner. Select the icon and wait to hear the banner melody; this app does not change the HOME Menu's own launch sound. Its sound pointer and PCM samples are checked in the finished CIA. If the banner version is old, use the clean reinstall steps in [INSTALL.md](INSTALL.md).
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.6` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.7` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.6/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.6" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.7/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.7" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.6/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.7/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

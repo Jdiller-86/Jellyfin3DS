@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.6/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.7/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -35,8 +35,8 @@ For this recovery update, use a clean reinstall to avoid stale HOME Menu content
 
 1. In FBI → Titles, select **Jellyfin3DS** (title ID `000400000FF00900`) and choose **Delete Title**. Do not select another title.
 2. Exit to HOME Menu and wait for its icon to disappear, then reboot.
-3. Open FBI and install v0.2.6 using the QR code above or the CIA download.
-4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.2.6**. Reboot once before testing launch.
+3. Open FBI and install v0.2.7 using the QR code above or the CIA download.
+4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.2.7**. Reboot once before testing launch.
 
 Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The purple banner includes a quiet two-second melody. The standard Homebrew launch splash temporarily returns in this recovery build because the custom archive was invalid. If it crashes again, press A to save the dump and include the `.dmp` from `sd:/luma/dumps/arm11/` with the banner version.
 
@@ -79,7 +79,7 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **Username or password is incorrect:** reopen Account and enter the credentials again. The password is not stored.
 
-**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Original models request 256×144 at 12 fps for software decoding; New models request up to 400×240 at 24 fps for MVD. Emulator MVD support varies. Original-model performance is experimental.
+**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Both model families now request 256×144 at 12 fps for software decoding. MVD is temporarily disabled. Console performance remains experimental.
 
 **Audio output unavailable:** dump DSP firmware with Rosalina, then restart the application.
 
@@ -87,4 +87,6 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.6` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.2.7` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+
+In v0.2.7, both original and New models use software decoding at up to 256×144/12 fps. MVD is disabled pending a reliable fix. `Jellyfin3DS-chime.wav` in the release previews the banner melody; the HOME Menu launch sound is separate.

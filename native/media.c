@@ -98,6 +98,20 @@ void direct_keyboard_poll(void) {
   bool pending = keyboard.pending && !keyboard.shutdown;
   LightLock_Unlock(&prepared_lock);
   if (!pending) return;
+  /* aptConvertScreenForCapture reads VRAM directly. Fail safely if a loader
+   * did not grant the mapping (also protects alternative 3DSX launchers). */
+  for (u32 address = 0x1f000000; address < 0x1f600000;) {
+    MemInfo memory; PageInfo page;
+    Result result = svcQueryMemory(&memory, &page, address);
+    if (R_FAILED(result) || !(memory.perm & MEMPERM_READ) ||
+        memory.base_addr + memory.size <= address) {
+      LightLock_Lock(&prepared_lock);
+      keyboard.result = -1; keyboard.pending = false; keyboard.done = true;
+      LightLock_Unlock(&prepared_lock);
+      return;
+    }
+    address = memory.base_addr + memory.size;
+  }
   /* The worker waits until done and cannot mutate this request while APT runs. */
   bool resume = video_player_get_status().state == VIDEO_PLAYING;
   if (resume) video_player_pause();
@@ -176,9 +190,8 @@ bool media_start(void) {
   log_init();
   video_player_init();
   /* Never probe the New-only MVD service on original models. */
-  bool new_model = false;
-  APT_CheckNew3DS(&new_model);
-  hardware_supported = new_model;
+  /* MVD can abort its system process; use the bounded software path until fixed. */
+  hardware_supported = false;
   MemInfo dsp_memory;
   PageInfo dsp_page;
   ndsp_result = svcQueryMemory(&dsp_memory, &dsp_page, 0x1ff50000);
