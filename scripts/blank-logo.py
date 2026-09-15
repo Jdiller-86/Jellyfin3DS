@@ -2,7 +2,7 @@
 
 Usage: python scripts/blank-logo.py path/to/makerom/src/ncch_logo.h
 Template: Project_CTR e8f5f529c54ff9b22a2491a480ffa69206bf7b19 (MIT).
-Retain the loader's layout/animation names, clear every ETC1A4 texture.
+Retain the loader's layout/animation names, replace every texture with transparent A4.
 """
 import re
 import struct
@@ -86,8 +86,10 @@ def clear_textures(archive):
         kind, offset, size = struct.unpack_from('<III', archive, table+i*12)
         if kind >> 24 or archive[offset+size-40:offset+size-36] != b'CLIM':
             continue
-        # BCLIM has a trailing 40-byte header. Format 10 is ETC1 with alpha.
-        assert struct.unpack_from('<I', archive, offset+size-8)[0] == 10
+        # ETC1 (10) and A4 (13) both occupy four bits per pixel.
+        # Use A4: zero ETC1 color alone would be opaque, not transparent.
+        assert struct.unpack_from('<I', archive, offset+size-8)[0] in (10, 13)
+        struct.pack_into('<I', archive, offset+size-8, 13)
         assert struct.unpack_from('<I', archive, offset+size-4)[0] == size-40
         archive[offset:offset+size-40] = bytes(size-40)
         cleared += 1
