@@ -45,6 +45,82 @@ static uint8_t *art_pending;
 static int art_width, art_height, art_handle = -1;
 static unsigned art_request, art_complete;
 
+/* The API worker queues input; only the main thread launches APT applets. */
+static struct {
+  bool pending, done, shutdown;
+  int result, limit;
+  bool password;
+  char hint[32], initial[512], text[2048];
+} keyboard;
+
+int direct_keyboard_input(const char *hint, const char *initial, int limit,
+                          bool password, char *out, size_t capacity) {
+  LightLock_Lock(&prepared_lock);
+  if (keyboard.shutdown || keyboard.pending) { LightLock_Unlock(&prepared_lock); return -1; }
+  snprintf(keyboard.hint, sizeof keyboard.hint, "%s", hint);
+  snprintf(keyboard.initial, sizeof keyboard.initial, "%s", initial);
+  keyboard.limit = limit; keyboard.password = password;
+  keyboard.result = -1; keyboard.done = false; keyboard.pending = true;
+  LightLock_Unlock(&prepared_lock);
+  for (;;) {
+    LightLock_Lock(&prepared_lock);
+    if (keyboard.done || keyboard.shutdown) {
+      int result = keyboard.shutdown ? -1 : keyboard.result;
+      if (result == 1) snprintf(out, capacity, "%s", keyboard.text);
+      memset(keyboard.initial, 0, sizeof keyboard.initial);
+      memset(keyboard.text, 0, sizeof keyboard.text);
+      LightLock_Unlock(&prepared_lock);
+      return result;
+    }
+    LightLock_Unlock(&prepared_lock);
+    svcSleepThread(10000000LL);
+  }
+}
+
+void direct_keyboard_cancel(void) {
+  LightLock_Lock(&prepared_lock);
+  keyboard.shutdown = true; keyboard.pending = false;
+  LightLock_Unlock(&prepared_lock);
+}
+
+static SwkbdCallbackResult keyboard_filter(void *user, const char **message,
+                                           const char *text, size_t length) {
+  (void)text;
+  if (length > *(int *)user) {
+    *message = "Text is too long.";
+    return SWKBD_CALLBACK_CONTINUE;
+  }
+  return SWKBD_CALLBACK_OK;
+}
+
+void direct_keyboard_poll(void) {
+  LightLock_Lock(&prepared_lock);
+  bool pending = keyboard.pending && !keyboard.shutdown;
+  LightLock_Unlock(&prepared_lock);
+  if (!pending) return;
+  /* The worker waits until done and cannot mutate this request while APT runs. */
+  bool resume = video_player_get_status().state == VIDEO_PLAYING;
+  if (resume) video_player_pause();
+  SwkbdState state;
+  swkbdInit(&state, SWKBD_TYPE_NORMAL, 2, keyboard.limit);
+  swkbdSetHintText(&state, keyboard.hint);
+  swkbdSetInitialText(&state, keyboard.initial);
+  swkbdSetFeatures(&state, SWKBD_DARKEN_TOP_SCREEN | SWKBD_DEFAULT_QWERTY);
+  swkbdSetValidation(&state, SWKBD_ANYTHING, 0, 0);
+  swkbdSetPasswordMode(&state, keyboard.password ? SWKBD_PASSWORD_HIDE : SWKBD_PASSWORD_NONE);
+  swkbdSetButton(&state, SWKBD_BUTTON_LEFT, "Cancel", false);
+  swkbdSetButton(&state, SWKBD_BUTTON_RIGHT, "OK", true);
+  swkbdSetFilterCallback(&state, keyboard_filter, &keyboard.limit);
+  SwkbdButton button = swkbdInputText(&state, keyboard.text, sizeof keyboard.text);
+  if (resume) video_player_pause();
+  LightLock_Lock(&prepared_lock);
+  keyboard.result = button == SWKBD_BUTTON_RIGHT ? 1 : button == SWKBD_BUTTON_LEFT ? 0 : -1;
+  keyboard.pending = false; keyboard.done = true;
+  LightLock_Unlock(&prepared_lock);
+  /* Consume the applet's closing input before normal input sampling resumes. */
+  hidScanInput();
+}
+
 int direct_art_upload(uint8_t *pixels, int width, int height) {
   LightLock_Lock(&prepared_lock);
   if (art_pending || !started) { LightLock_Unlock(&prepared_lock); free(pixels); return -1; }
@@ -94,6 +170,7 @@ void direct_media_forget_prepared(void) {
 
 bool media_start(void) {
   LightLock_Init(&prepared_lock);
+  memset(&keyboard, 0, sizeof keyboard);
   memset(&prepared, 0, sizeof prepared);
   curl_global_init(CURL_GLOBAL_DEFAULT);
   log_init();

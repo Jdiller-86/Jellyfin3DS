@@ -6,25 +6,23 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **Targets original and New Nintendo 3DS models.** Original 3DS/3DS XL/2DS use software H.264 decoding with a server transcode capped at 256×144 and 12 fps. New 3DS/XL/LL and New 2DS XL use MVD hardware decoding at up to 400×240 and 24 fps. Original-model playback performance and the repaired CIA still need physical-console validation.
 
-## v0.2.5 launch repair
+## v0.2.6 launch recovery
 
-Restores the launch archive removed in v0.2.3, implicated by the reported “SD card was removed” launch error. The archive retains its layouts and animations but uses fully transparent textures, so the generic Homebrew splash remains hidden. The HOME Menu has a softer, lower-volume melodic chime and the existing purple icon. Launch still needs physical-console retesting.
+Removes the broken custom launch archive from v0.2.4/v0.2.5 and restores the complete, authenticated resource from the working baseline. The earlier generator changed the archive without regenerating its HMAC footer. **The generic Homebrew launch splash temporarily returns.** Hiding it remains unfinished; launch reliability takes priority.
 
-Also includes the previous repair to the MVD input-address path implicated by the reported system-service crash, submits separate bounded NAL units, and rejects oversized packets instead of truncating them. The DSP startup mapping fix remains included.
+The HOME Menu banner displays **v0.2.6** and includes the soft two-second melodic chime. If you still hear the old sound or cannot see that version, follow the clean reinstall instructions in [INSTALL.md](INSTALL.md). The installer keeps the existing title ID and SD configuration path.
 
-Browse vertically with Up/Down, the lower-screen arrows, or a vertical swipe. Tap a row to preview its artwork and tap it again (or press A) to open it. Selected-item artwork is fetched directly from Jellyfin after selection settles, with a placeholder for missing images. Video keeps priority on the top screen while playing. Lists retain only a five-row window and artwork is limited to one 256×144 texture.
+Server, username, password, and search use the native 3DS software keyboard. Cancel preserves the current value; password entry is masked. Playback pauses while the applet is open. The simulated UI tests mock applet replies; the system keyboard itself requires console testing.
 
-Back restores the previous selection and list position. Controls use concise labels and Jellyfin-purple accents. The CIA uses a transparent launch logo while retaining the HOME Menu icon and banner.
-
-The new playback repair still requires physical-console retesting.
+Includes prior DSP mapping and MVD address/NAL repairs, purple styling, vertical browsing, and top-screen artwork. Physical-console launch and playback still require retesting, particularly original-model playback performance.
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.5` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.6` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.5/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.5" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.6/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.6" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.5/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.6/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

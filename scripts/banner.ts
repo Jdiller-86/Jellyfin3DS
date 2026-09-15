@@ -1,5 +1,5 @@
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { appIcon } from "./icons.ts";
 
@@ -19,6 +19,8 @@ export async function buildBanner(root: string) {
   c.textAlign = "center"; c.fillStyle = "#3c4954"; c.font = 'bold 26px "Jellyfin UI"';
   c.fillText("Jellyfin3DS", 128, 88);
   c.fillStyle = "#75409b"; c.font = '12px "Jellyfin UI"';
+  const version = JSON.parse(readFileSync(join(root,"pocket.json"),"utf8")).version;
+  c.fillText(`v${version}`,128,111);
   writeFileSync(join(dir, "banner.png"), canvas.toBuffer("image/png"));
   const rate = 22050, count = rate * 2, wav = Buffer.alloc(44 + count * 2);
   wav.write("RIFF"); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);

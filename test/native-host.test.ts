@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   transformGfx,
+  transformMain,
   transformMakefile,
   transformMediaHeader,
   transformVideoHeader,
@@ -42,4 +43,10 @@ test("PocketJS texture seam carries the decoded frame bounds", () => {
   expect(header).toContain("float *u_scale, float *v_scale");
   expect(gfx).toContain("media_texture(handle, u_scale, v_scale)");
   expect(videoHeader).toContain("C3D_Tex *video_player_texture");
+});
+
+test("system keyboard runs on the application loop outside rendering", () => {
+  const main=transformMain(readFileSync(`${host}/src/main.c`,"utf8"));
+  expect(main).toContain('while (aptMainLoop()) {\n    direct_keyboard_poll();\n    hidScanInput();');
+  expect(readFileSync("app/main.tsx","utf8")).not.toContain("createOsk");
 });

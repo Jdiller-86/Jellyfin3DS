@@ -4,7 +4,6 @@ import { AuxiliarySurface, View, Text, Image, type NodeMirror } from "@pocketjs/
 import { onFrame, onButtonPress } from "@pocketjs/framework/lifecycle";
 import { BTN } from "@pocketjs/framework/input";
 import { createGesture } from "@pocketjs/framework/gesture";
-import { createOsk, Osk } from "@pocketjs/framework/osk";
 import { offload } from "@pocketjs/framework/offload";
 import { mediaPlayer, type MediaStatus } from "@pocketjs/framework/media";
 import { getOps } from "@pocketjs/framework/host";
@@ -58,35 +57,20 @@ function App() {
   let artWanted = "", artAge = 0, artPending = false, dragY = 0;
 
 
-  const searchOsk = createOsk({
-    value: query,
-    setValue: setQuery,
-    maxLength: 80,
-    onCommit: (value) => {
-      const text = value.trim();
-      if (text) load({ mode: "search", title: text, query: text, offset: 0 });
-    },
-  });
-  const serverOsk = createOsk({
-    value: server,
-    setValue: setServer,
-    maxLength: 511,
-    onCommit: () => setSetupField(1),
-  });
-  const usernameOsk = createOsk({
-    value: username,
-    setValue: setUsername,
-    maxLength: 63,
-    onCommit: () => setSetupField(2),
-  });
-  const passwordOsk = createOsk({
-    value: password,
-    setValue: setPassword,
-    maxLength: 127,
-    onCommit: () => setSetupField(3),
-  });
-  const anyOsk = () => searchOsk.isOpen() || serverOsk.isOpen() ||
-    usernameOsk.isOpen() || passwordOsk.isOpen();
+  function editField(field: "server" | "username" | "password" | "search") {
+    if (busy()) return;
+    const value = field === "server" ? server() : field === "username" ? username() : field === "password" ? password() : query();
+    command({t:"keyboard",field,value}, (reply: {accepted:boolean;value?:string}) => {
+      if (!reply.accepted || typeof reply.value !== "string") return;
+      if (field === "server") { setServer(reply.value); setSetupField(1); }
+      else if (field === "username") { setUsername(reply.value); setSetupField(2); }
+      else if (field === "password") { setPassword(reply.value); setSetupField(3); }
+      else {
+        const text=reply.value.trim(); setQuery(text);
+        if(text)load({mode:"search",title:text,query:text,offset:0});
+      }
+    });
+  }
 
   function command(commandValue: unknown, done: (value: any) => void, foreground = true) {
     if (!rpc.connected()) {
@@ -189,9 +173,9 @@ function App() {
   }
 
   function editSetupField() {
-    if (setupField() === 0) serverOsk.open();
-    else if (setupField() === 1) usernameOsk.open();
-    else if (setupField() === 2) passwordOsk.open();
+    if (setupField() === 0) editField("server");
+    else if (setupField() === 1) editField("username");
+    else if (setupField() === 2) editField("password");
     else if (setupField() === 3) login();
     else logout();
   }
@@ -320,7 +304,7 @@ function App() {
     else if (page().items[index()]) open(page().items[index()]);
   });
   onButtonPress(BTN.CROSS, back);
-  onButtonPress(BTN.TRIANGLE, () => screen() === "browser" && !busy() && searchOsk.open());
+  onButtonPress(BTN.TRIANGLE, () => screen() === "browser" && !busy() && editField("search"));
   onButtonPress(BTN.SQUARE, () => screen() === "browser" && home("resume"));
   onButtonPress(BTN.START, pause);
   onButtonPress(BTN.SELECT, () => playing() ? setControls(!controls()) : showSetup());
@@ -332,12 +316,12 @@ function App() {
     axis: "y",
     onPanStart: () => { dragY = 0; },
     onPanMove: (contact) => {
-      if (anyOsk() || contact.startY < 48 || contact.startY >= 188) return;
+      if (busy() || contact.startY < 48 || contact.startY >= 188) return;
       dragY += contact.fdy;
       if (Math.abs(dragY) >= 24) { move(dragY < 0 ? 1 : -1); dragY = 0; }
     },
     onTap: (contact) => {
-      if (anyOsk() || busy()) return;
+      if (busy()) return;
       if (screen() === "setup") {
         let chosen = -1;
         if (contact.y >= 43 && contact.y < 82) chosen = 0;
@@ -355,7 +339,7 @@ function App() {
       if (contact.y < 32) {
         if (contact.x < 80) home("libraries");
         else if (contact.x < 160) home("resume");
-        else if (contact.x < 240) searchOsk.open();
+        else if (contact.x < 240) editField("search");
         else showSetup();
         return;
       }
@@ -518,27 +502,13 @@ function App() {
       <Show when={message() && message() !== "Loading…" && (!playing() || status()?.phase === "error")}>
         <View class="absolute left-[20] right-[20] bottom-[30] p-[8] rounded-lg bg-[#fff8df] border border-[#dacb99]"><Text class="text-xs text-[#6a5b36]">{message()}</Text></View>
       </Show>
-      <Show when={searchOsk.isOpen() && !playing()}>
-        <View class="absolute left-[12] right-[12] top-[12] bottom-[42] p-[16] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-3">
-          <Text class="text-lg text-[#75409b] font-bold">Search</Text>
-          <Text class="text-base text-[#3c4954]">{query() || "Movie, show or episode"}</Text>
-          <Text class="text-xs text-[#6a7680]">START: Search</Text>
-        </View>
-      </Show>
-      <Show when={anyOsk() && screen() === "setup"}>
-        <View class="absolute left-[12] right-[12] top-[12] bottom-[18] p-[16] rounded-xl bg-white border border-[#c4cbd1] flex-col gap-3">
-          <Text class="text-lg text-[#75409b] font-bold">{serverOsk.isOpen() ? "Jellyfin server" : usernameOsk.isOpen() ? "Username" : "Password"}</Text>
-          <Text class="text-base text-[#3c4954]">{serverOsk.isOpen() ? server() : usernameOsk.isOpen() ? username() : passwordLabel()}</Text>
-          <Text class="text-xs text-[#6a7680]">START: Done   B: Cancel</Text>
-        </View>
-      </Show>
       <Show when={playing() && !(status()?.presentedFrames)}>
         <View class="absolute inset-0 items-center justify-center"><Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text></View>
       </Show>
     </View>
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
-      <Show when={screen() === "setup" && !anyOsk()}>
+      <Show when={screen() === "setup"}>
         <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account</Text></View>
         <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
@@ -592,15 +562,6 @@ function App() {
         <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || "A: Open   X: Search")}</Text>
       </Show>
 
-      <Show when={anyOsk()}>
-        <View class="absolute inset-0 bg-[#f5f5f5] flex-col justify-end">
-          <Text class="text-sm text-[#3c4954]">{searchOsk.isOpen() ? searchOsk.display() : serverOsk.isOpen() ? serverOsk.display() : usernameOsk.isOpen() ? usernameOsk.display() : `${"*".repeat(password().length)}|`}</Text>
-          <Show when={searchOsk.isOpen()}><Osk osk={searchOsk} surface="auxiliary" keyHeight={25} theme="light" /></Show>
-          <Show when={serverOsk.isOpen()}><Osk osk={serverOsk} surface="auxiliary" keyHeight={25} theme="light" /></Show>
-          <Show when={usernameOsk.isOpen()}><Osk osk={usernameOsk} surface="auxiliary" keyHeight={25} theme="light" /></Show>
-          <Show when={passwordOsk.isOpen()}><Osk osk={passwordOsk} surface="auxiliary" keyHeight={25} theme="light" /></Show>
-        </View>
-      </Show>
     </View>}</AuxiliarySurface>
   </>;
 }

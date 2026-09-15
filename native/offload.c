@@ -24,7 +24,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.2.5"
+#define APP_VERSION "0.2.6"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -695,6 +695,29 @@ static cJSON *ok_result(void) {
   return result;
 }
 
+static bool keyboard_command(const cJSON *command, cJSON **result, char *error, size_t capacity) {
+  const char *field = json_string(command, "field");
+  const char *initial = json_string(command, "value");
+  const char *hint = NULL;
+  int limit = 0;
+  bool password = false;
+  if (field && strcmp(field, "server") == 0) { hint = "Server URL"; limit = 511; }
+  else if (field && strcmp(field, "username") == 0) { hint = "Username"; limit = 63; }
+  else if (field && strcmp(field, "password") == 0) { hint = "Password"; limit = 127; password = true; }
+  else if (field && strcmp(field, "search") == 0) { hint = "Search"; limit = 80; }
+  if (!hint || !initial || strlen(initial) > (size_t)limit) {
+    copy_text(error, capacity, "Invalid keyboard input"); return false;
+  }
+  char text[512] = {0};
+  int status = direct_keyboard_input(hint, initial, limit, password, text, sizeof text);
+  if (status < 0) { copy_text(error, capacity, "Keyboard unavailable. Try again."); return false; }
+  *result = cJSON_CreateObject();
+  cJSON_AddBoolToObject(*result, "accepted", status == 1);
+  if (status == 1) cJSON_AddStringToObject(*result, "value", text);
+  memset(text, 0, sizeof text);
+  return true;
+}
+
 static bool command_handle(const cJSON *command, cJSON **result, char *error,
                            size_t error_capacity) {
   if (!cJSON_IsObject(command)) {
@@ -706,6 +729,7 @@ static bool command_handle(const cJSON *command, cJSON **result, char *error,
     copy_text(error, error_capacity, "Jellyfin command type is missing");
     return false;
   }
+  if (strcmp(type, "keyboard") == 0) return keyboard_command(command, result, error, error_capacity);
   if (strcmp(type, "hello") == 0) {
     *result = hello_result(true);
     return true;
@@ -867,6 +891,7 @@ bool offload_start(void) {
 }
 
 void offload_stop(void) {
+  direct_keyboard_cancel();
   atomic_store(&running, false);
   if (worker) {
     threadJoin(worker, U64_MAX);
