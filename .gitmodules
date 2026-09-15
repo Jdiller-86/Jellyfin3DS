@@ -1,0 +1,6 @@
+[submodule "vendor/pocketjs"]
+	path = vendor/pocketjs
+	url = https://github.com/pocket-stack/pocketjs.git
+[submodule "vendor/jellyfin-3ds"]
+	path = vendor/jellyfin-3ds
+	url = https://github.com/bogocat/jellyfin-3ds.git

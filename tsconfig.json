@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "types": [
+      "bun-types"
+    ],
+    "paths": {
+      "@pocketjs/framework/solid": [
+        "./vendor/pocketjs/framework/src/index.ts"
+      ],
+      "@pocketjs/framework/*": [
+        "./vendor/pocketjs/framework/src/*"
+      ],
+      "@pocketjs/framework/input": [
+        "./vendor/pocketjs/framework/src/input-api.ts"
+      ]
+    },
+    "allowJs": true
+  },
+  "include": [
+    "app",
+    "host",
+    "scripts",
+    "test",
+    "tests-ui"
+  ]
+}

@@ -1,0 +1,99 @@
+name: Build 3DS homebrew
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: jellyfin-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun run setup
+      - run: bun run typecheck
+      - run: bun run test
+      - name: Install pinned Rust and devkitARM
+        run: |
+          rustup toolchain install nightly-2026-07-02 --profile minimal --component rust-src
+          docker pull devkitpro/devkitarm@sha256:116afba8df8453961de2936ffab20dd441edf4d682856c1ec8b0e53d7ed0bbf5
+      - name: Cache native Jellyfin dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .pocket/native/portlibs
+            .pocket/native/cacert.pem
+            vendor/jellyfin-3ds/lib/ffmpeg/*.a
+            vendor/jellyfin-3ds/lib/ffmpeg/include
+          key: jellyfin3ds-native-${{ hashFiles('scripts/native-deps.ts', 'vendor/jellyfin-3ds/lib/ffmpeg/build-ffmpeg.sh') }}
+      - run: bun run native:deps
+      - name: Validate rendered two-screen UI
+        run: |
+          rustup target add wasm32-unknown-unknown
+          bun run test:ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-ui
+          path: .pocket-build/validation/ui/
+      - run: bun run build
+      - run: python3 scripts/verify-cia.py dist/3ds/Jellyfin3DS.cia
+      - name: Preserve native crash symbols
+        run: |
+          mkdir -p dist/debug
+          cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.elf dist/debug/
+          cp vendor/pocketjs/dist/3ds/build/jellyfin3ds/pocketjs-3ds.map dist/debug/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-debug
+          path: dist/debug/
+      - run: bun run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/pocketjs-client')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Jellyfin3DS-install
+          path: dist/install
+      - name: Publish the FBI-installable v0.2.7 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          release_notes='Recovery v0.2.7: fixes missing VRAM access for the OS keyboard and adds a safe preflight check. Temporarily bypasses the crashing MVD service with software playback at 256x144/12fps on both models. Includes an exact banner-chime WAV preview. Console retesting is required; the standard Homebrew splash remains.'
+          if gh release view v0.2.7 >/dev/null 2>&1; then
+            echo 'v0.2.7 already exists; versioned releases are immutable. Bump the version to publish another build.'
+            exit 0
+          fi
+          gh release create v0.2.7 \
+            dist/install/cias/Jellyfin3DS.cia \
+            dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
+            dist/install/SHA256SUMS \
+            dist/install/INSTALL.md \
+            dist/install/FBI-QR.png \
+            dist/install/Jellyfin3DS-chime.wav \
+            --prerelease --target "$RELEASE_COMMIT" \
+            --title 'Jellyfin3DS v0.2.7 (experimental)' --notes "$release_notes"
+          verify_dir="$(mktemp -d)"
+          gh release download v0.2.7 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"
