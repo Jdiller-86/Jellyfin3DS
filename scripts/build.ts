@@ -16,7 +16,7 @@ const pocketOnly=process.argv.includes("--pocket-only");
 if (!pocketOnly) await buildBanner(root);
 const nativeStage=pocketOnly?undefined:stageNativeHost(root);
 try {
-  if(!pocketOnly)iconPaths.forEach((p,i)=>writeFileSync(p,appIcon(i?24:48)));
+  if(!pocketOnly)for (const [i,p] of iconPaths.entries()) writeFileSync(p,await appIcon(i?24:48));
   await build3ds([`--plan=${planPath}`, `--manifest=${root}/pocket.json`, `--project-root=${root}`, ...process.argv.slice(2)]);
 } finally {
   iconPaths.forEach((p,i)=>writeFileSync(p,originals[i]));

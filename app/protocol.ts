@@ -9,6 +9,7 @@ export interface Item {
   year?: number;
   artId?: string;
 }
+export interface Metadata { overview?: string; series?: string; rating?: string; genre?: string; season?: number; episode?: number; artId?: string }
 export interface Page { items: Item[]; total: number; offset: number }
 export interface Hello {
   direct: true;

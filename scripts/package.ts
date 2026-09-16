@@ -17,3 +17,7 @@ copyFileSync("vendor/pocketjs/assets/fonts/LICENSE.txt",`${out}/licenses/Inter-O
 copyFileSync("vendor/jellyfin-3ds/LICENSE",`${out}/licenses/GPL-3.0.txt`);
 copyFileSync("THIRD_PARTY.md",`${out}/licenses/THIRD_PARTY.md`);
 copyFileSync(".pocket/banner/tool/LICENSE.txt",`${out}/licenses/bannertool.txt`);
+
+copyFileSync("assets/jellyfin/LICENSE",`${out}/licenses/Jellyfin-artwork.txt`);
+copyFileSync("assets/jellyfin/README.md",`${out}/licenses/Jellyfin-artwork-attribution.md`);
+copyFileSync("assets/jellyfin/CONTRIBUTORS.md",`${out}/licenses/Jellyfin-contributors.md`);

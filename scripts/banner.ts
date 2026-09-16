@@ -1,9 +1,8 @@
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { appIcon } from "./icons.ts";
 
-// Original artwork and synthesized chime, matching the app's silver/purple theme.
+// Official service artwork, a clearly unofficial client label, and silent banner audio.
 export async function buildBanner(root: string) {
   GlobalFonts.registerFromPath(join(root,"vendor/pocketjs/assets/fonts/Inter-Regular.ttf"),"Jellyfin UI");
   GlobalFonts.registerFromPath(join(root,"vendor/pocketjs/assets/fonts/Inter-Bold.ttf"),"Jellyfin UI");
@@ -11,35 +10,22 @@ export async function buildBanner(root: string) {
   mkdirSync(dir, { recursive: true });
   const canvas = createCanvas(256, 128), c = canvas.getContext("2d");
   const background = c.createLinearGradient(0, 0, 0, 128);
-  background.addColorStop(0, "#ffffff"); background.addColorStop(1, "#dce4eb");
+  background.addColorStop(0, "#171422"); background.addColorStop(1, "#101018");
   c.fillStyle = background; c.fillRect(0, 0, 256, 128);
-  c.strokeStyle = "#e0e6eb";
-  for (let x = 0; x < 256; x += 16) { c.beginPath(); c.moveTo(x,0); c.lineTo(x,128); c.stroke(); }
-  c.drawImage(await loadImage(appIcon(48)), 104, 10);
-  c.textAlign = "center"; c.fillStyle = "#3c4954"; c.font = 'bold 26px "Jellyfin UI"';
-  c.fillText("Jellyfin3DS", 128, 88);
-  c.fillStyle = "#75409b"; c.font = '12px "Jellyfin UI"';
+  c.drawImage(await loadImage(readFileSync(join(root,"assets/jellyfin/icon.svg"))), 106, 6, 44, 44);
+  c.textAlign = "center"; c.fillStyle = "#ffffff"; c.font = 'bold 25px "Jellyfin UI"';
+  c.fillText("Jellyfin3DS", 128, 82);
+  c.fillStyle = "#c1a4d4"; c.font = '11px "Jellyfin UI"';
   const version = JSON.parse(readFileSync(join(root,"pocket.json"),"utf8")).version;
-  c.fillText(`v${version}`,128,111);
+  c.fillText(`Unofficial client · v${version}`,128,108);
   writeFileSync(join(dir, "banner.png"), canvas.toBuffer("image/png"));
   const rate = 22050, count = rate * 2, wav = Buffer.alloc(44 + count * 2);
   wav.write("RIFF"); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
   wav.writeUInt32LE(16,16); wav.writeUInt16LE(1,20); wav.writeUInt16LE(1,22);
   wav.writeUInt32LE(rate,24); wav.writeUInt32LE(rate*2,28); wav.writeUInt16LE(2,32);
   wav.writeUInt16LE(16,34); wav.write("data",36); wav.writeUInt32LE(count*2,40);
-  for (let i=0; i<count; ++i) {
-    const t=i/rate;
-    // Soft C-major arpeggio: rounded attacks, restrained overtone, natural tail.
-    const sample=[261.63,329.63,392.00,523.25].reduce((sum,f,j)=> {
-      const u=t-j*0.22;
-      if(u<0)return sum;
-      const attack=Math.sin(Math.min(1,u/0.045)*Math.PI/2)**2;
-      const tone=Math.sin(2*Math.PI*f*u)+0.08*Math.sin(4*Math.PI*f*u)*Math.exp(-5*u);
-      return sum+tone*attack*Math.exp(-3.8*u);
-    },0);
-    const fade=Math.sin(Math.min(1,(count-1-i)/(rate*0.3))*Math.PI/2)**2;
-    wav.writeInt16LE(Math.round(sample*2300*fade),44+i*2);
-  }
+  // Keep a valid non-looping CWAV but emit silence: no synthetic beeping.
+  // The console's own HOME Menu launch sound is outside this app's control.
   writeFileSync(join(dir,"banner.wav"),wav);
   const source=join(dir,"tool"), executable=join(dir,"bannertool");
   async function run(cmd:string[], cwd=root) {

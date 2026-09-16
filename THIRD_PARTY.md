@@ -11,3 +11,7 @@ Jellyfin3DS is independent and unofficial. It is not endorsed by Jellyfin or Nin
 This combined program is distributed under GPL-3.0. The complete GPL text is at `vendor/jellyfin-3ds/LICENSE` and is copied into install artifacts as `licenses/GPL-3.0.txt`.
 
 - [3ds-bannertool](https://github.com/carstene1ns/3ds-bannertool), originally by Steveice10, is pinned at `734d33be79fd3f8c29c6296158f06ac7c5ca9dcb` to generate the HOME Menu banner. Its MIT license is included with the install package. Banner artwork and synthesized audio are original to this project.
+
+## Jellyfin service artwork
+
+The icon is from jellyfin/jellyfin-ux commit `69a2b7b1237732a134dd501ff55b9404cf2d1601`. Copyright Jellyfin contributors, CC-BY-SA-4.0; see `assets/jellyfin/`. The SVG is unchanged; raster scaling and banner composition are adaptations under the same license. This client is unofficial and is not endorsed by Jellyfin.

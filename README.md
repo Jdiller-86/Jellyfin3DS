@@ -6,21 +6,27 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **Targets original and New 3DS models.** This recovery build uses software H.264 decoding on both, requesting a server transcode capped at 256×144 and 12 fps. MVD is temporarily disabled because it still crashes the system service. Playback performance needs console validation.
 
-## v0.2.7 search and playback recovery
+## v0.3.0 browsing update
 
-The search crash at PC `00430090` resolves to libctru `aptConvertScreenForCapture`: the keyboard reads VRAM at `1F4C7800`, which the prior CIA did not map. This build grants read-only access to the 6 MB VRAM range and checks it before launching the keyboard. Missing access now returns an error instead of entering the applet.
+- Continuous touch scrolling with gentle momentum, D-pad focus, and bounded prefetching.
+- A visible **Now playing** button returns to controls without restarting the video.
+- Artwork is padded to valid GPU texture dimensions; PNG/JPEG and item/parent fallbacks are supported.
+- Item details show the synopsis, series/episode, year, runtime, rating, and genre when supplied by the server. Resume progress appears in the list.
+- Icon and banner use the upstream Jellyfin service artwork, with an unofficial-client label. The banner is **silent**: no synthesized chime.
 
-The native keyboard, purple UI, vertical browsing and artwork remain included. The authenticated standard Homebrew launch splash still temporarily returns; hiding it remains unfinished.
+The user confirmed streaming and the system keyboard work in v0.2.7. This update preserves those paths. New UI/network behavior still needs console testing.
 
-The banner displays **v0.2.7**. The release includes `Jellyfin3DS-chime.wav`, an exact preview of the PCM audio embedded in the banner. Select the icon and wait to hear the banner melody; this app does not change the HOME Menu's own launch sound. Its sound pointer and PCM samples are checked in the finished CIA. If the banner version is old, use the clean reinstall steps in [INSTALL.md](INSTALL.md).
+**Launch splash:** the authenticated standard Homebrew archive remains. The previous modified archive failed HOME Menu authentication and prevented launch. Safe removal needs a correctly authenticated blank archive; this release does not substitute another unverified logo. See [VALIDATION.md](VALIDATION.md).
+
+The banner displays **v0.3.0**. `Jellyfin3DS-chime.wav` is an exact, silent preview of the banner audio. The console's own HOME Menu launch sound is separate and is not changed. If the banner version is old, follow [INSTALL.md](INSTALL.md).
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.2.7` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.0` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.7/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.2.7" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.0/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.0" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.2.7/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.0/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 
@@ -55,7 +61,7 @@ CI uses Bun 1.4.2, PocketJS commit `a5a85356e172db8a32aefa983ee1259f60406f69`, b
 - The server URL, username, persistent device ID, Jellyfin user ID, and access token are stored at `/3ds/Jellyfin3DS/config.json` so the app can reconnect. Signing out removes the access token and user ID.
 - Tokens travel in HTTP headers, not stream URLs. Redirects are disabled so an authorization header cannot be forwarded to another host.
 - HTTPS certificate and hostname verification use the CA bundle embedded at build time. A private or self-signed certificate must be trusted by that bundle; otherwise use plain HTTP only on a network you trust.
-- The client accepts only `http://` and `https://` server URLs and bounds API responses, requests, item names, and five-row result pages for 3DS memory limits.
+- The client accepts only `http://` and `https://` server URLs and bounds API responses, requests, item names, and five-item network batches and a rolling 40-item browse cache for 3DS memory limits.
 
 ## Current scope
 

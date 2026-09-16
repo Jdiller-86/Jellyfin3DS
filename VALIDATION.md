@@ -21,3 +21,26 @@ Known product limits are listed in README.md and INSTALL.md.
 ## v0.2.2 follow-up
 
 The user confirmed startup and browsing work with v0.2.1, but playback crashed the MVD system service (process mvd, PC 0x0010fac8, read FAR 0x14dcde00). The local decoder now converts old linear addresses to the new FCRAM alias before IPC and splits Annex B packets into individual NAL units. This is a source-level repair; playback must be retested on hardware. The UI journey now covers vertical window movement and an artwork reply.
+
+## v0.3.0 UX update
+
+The user confirmed v0.2.7 streaming and the native keyboard work on their console.
+The decoder, DSP/VRAM mappings, keyboard implementation and authenticated launch
+logo are unchanged. This does not establish compatibility on every model.
+
+Artwork now receives a transparent 256x256 texture, with its aspect-preserving
+image centered in the visible 256x144 region. A native AddressSanitizer/UBSan test
+covers landscape/portrait placement, padding, and invalid dimensions. The UI
+journey covers multi-batch scrolling, metadata/art replies, and returning to a
+running player's controls without reopening the stream. CIA verification checks
+the exact silent PCM and the authenticated logo digest.
+
+Console checks still required: scroll a large library in both directions, enter
+and return from folders, load real PNG/JPEG art (including missing images), inspect
+series metadata, and browse/return to playback while streaming. Verify the banner
+version after installation; the console's own launch sound is not app audio.
+
+Safe splash removal remains blocked on an authenticated blank archive. Upstream
+https://github.com/yellows8/ctr-logobuilder documents an HMAC footer requiring a
+HOME Menu-derived key. No such key or verified blank archive is in this build.
+Retaining the proven resource avoids repeating the earlier launch regression.

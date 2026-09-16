@@ -33,17 +33,18 @@ import hashlib
 assert hashlib.sha256(entries.get('logo', b'')).hexdigest() == \
     '62a5a1f9091aefb46b52e31fbeca2fdba9a99fe2473237e21e35b8d2e5659dff', \
     'Launch logo differs from the authenticated working baseline'
-assert struct.unpack_from('<H', exheader, 0xE)[0] == 7, 'CIA revision missing'
+assert struct.unpack_from('<H', exheader, 0xE)[0] == 8, 'CIA revision missing'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]
 assert title == 'Jellyfin3DS', f'Unexpected HOME Menu title: {title!r}'
-assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.2.7'
+assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.3.0'
 # SMDH stores tiled RGB565 pixels; histogram checks are independent of tiling.
 for offset, pixels in ((0x2040, 24*24), (0x24C0, 48*48)):
     colors = struct.unpack_from('<' + str(pixels) + 'H', icon, offset)
-    purple = ((0xAA >> 3) << 11) | ((0x5C >> 2) << 5) | (0xC3 >> 3)
-    assert colors.count(purple) > pixels // 5, 'Purple HOME Menu icon missing'
+    # The official gradient includes purple and cyan rather than a flat color.
+    colored = sum(1 for color in colors if (color & 31) > 15 and ((color >> 11) & 31) < 24)
+    assert colored > pixels // 8, 'Jellyfin gradient icon missing'
 banner = entries['banner']
 assert len(banner) > 256, 'Banner is empty'
 cwav_at = u32(banner, 0x84)
@@ -59,5 +60,5 @@ with wave.open('.pocket/banner/banner.wav') as wav:
     pcm = wav.readframes(wav.getnframes())
 assert cwav[data_at+32:data_at+32+len(pcm)] == pcm, 'Packaged chime differs from source'
 samples = struct.unpack('<' + str(len(pcm)//2) + 'h', pcm)
-assert max(map(abs, samples)) < 4096 and samples[0] == samples[-1] == 0, 'Chime level/fade regression'
+assert not any(samples), 'Banner must be silent'
 print('CIA verified: DSP mapping, Jellyfin3DS title, SMDH icon, CBMD banner')

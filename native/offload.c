@@ -4,6 +4,7 @@
 #include "offload_queue.h"
 #include "soc.h"
 #include "direct_media.h"
+#include "artwork.h"
 #include "cJSON.h"
 
 #include <3ds.h>
@@ -20,11 +21,12 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
 #define STBI_NO_STDIO
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.2.7"
+#define APP_VERSION "0.3.0"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -430,10 +432,12 @@ static bool item_is_folder(const char *type) {
 }
 
 static void utf8_copy(char *out, size_t capacity, const char *value) {
-  copy_text(out, capacity, value ? value : "Untitled");
-  size_t length = strlen(out);
-  while (length && ((unsigned char)out[length - 1] & 0xc0u) == 0x80u)
-    out[--length] = 0;
+  if (!capacity) return;
+  if (!value) value = "";
+  size_t length = strlen(value), take = length < capacity ? length : capacity - 1;
+  /* Cut before an incomplete code point, preserving complete multibyte names. */
+  if (take < length) while (take && ((unsigned char)value[take] & 0xc0u) == 0x80u) --take;
+  memcpy(out, value, take); out[take] = 0;
 }
 
 static cJSON *compact_item(const cJSON *source) {
@@ -642,6 +646,36 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   return true;
 }
 
+/* Selected-item metadata is separate from the bounded five-item list records. */
+static bool info_command(const cJSON *command, cJSON **result, char *error, size_t capacity) {
+  const char *id = json_string(command, "id");
+  if (!authenticated() || !valid_id(id)) { copy_text(error, capacity, "Item unavailable"); return false; }
+  char suffix[160], url[SERVER_MAX + 160];
+  snprintf(suffix, sizeof suffix, "/Users/%s/Items/%s", config.user_id, id);
+  if (!make_url(url, sizeof url, config.server, suffix)) return false;
+  cJSON *reply = NULL; long status = 0;
+  if (!http_json(&config, "GET", url, NULL, true, &reply, &status, error, capacity)) return false;
+  *result = cJSON_CreateObject();
+  char text[401];
+  const char *fields[] = {"Overview", "SeriesName", "OfficialRating"};
+  const char *names[] = {"overview", "series", "rating"};
+  for (int i = 0; i < 3; ++i) {
+    utf8_copy(text, i == 0 ? sizeof text : 81, json_string(reply, fields[i]));
+    cJSON_AddStringToObject(*result, names[i], text);
+  }
+  cJSON_AddNumberToObject(*result, "season", json_number(reply, "ParentIndexNumber", 0));
+  cJSON_AddNumberToObject(*result, "episode", json_number(reply, "IndexNumber", 0));
+  const cJSON *genres = json_member(reply, "Genres");
+  const cJSON *genre = cJSON_IsArray(genres) ? cJSON_GetArrayItem(genres, 0) : NULL;
+  utf8_copy(text, 65, cJSON_IsString(genre) ? genre->valuestring : "");
+  cJSON_AddStringToObject(*result, "genre", text);
+  const char *parent = json_string(reply, "ParentBackdropItemId");
+  if (!valid_id(parent)) parent = json_string(reply, "SeriesId");
+  if (valid_id(parent)) cJSON_AddStringToObject(*result, "artId", parent);
+  cJSON_Delete(reply);
+  return true;
+}
+
 /* Artwork is fetched only after selection settles; failures are a normal placeholder. */
 static bool art_command(const cJSON *command, cJSON **result) {
   *result = cJSON_CreateObject();
@@ -650,8 +684,11 @@ static bool art_command(const cJSON *command, cJSON **result) {
   if (!authenticated() || !valid_id(id)) return true;
   char suffix[256], url[SERVER_MAX + 256], token[320];
   snprintf(token, sizeof token, "X-Emby-Token: %s", config.token);
-  for (int kind = 0; kind < 2; ++kind) {
-    snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=png", id, kind ? "Primary" : "Backdrop");
+  const char *fallback = json_string(command, "fallback");
+  const char *kinds[] = {"Primary", "Backdrop", "Thumb"};
+  for (int kind = 0; kind < (valid_id(fallback) && strcmp(fallback, id) ? 6 : 3); ++kind) {
+    const char *image_id = kind < 3 ? id : fallback;
+    snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=png", image_id, kinds[kind % 3]);
     if (!make_url(url, sizeof url, config.server, suffix)) break;
     CURL *curl = curl_easy_init();
     if (!curl) break;
@@ -680,10 +717,13 @@ static bool art_command(const cJSON *command, cJSON **result) {
       pixels = stbi_load_from_memory((uint8_t *)body.data, body.size, &w, &h, &channels, 4);
     free(body.data);
     if (!pixels) continue;
-    int handle = direct_art_upload(pixels, w, h);
+    uint8_t *padded = artwork_canvas(pixels, w, h);
+    stbi_image_free(pixels);
+    if (!padded) continue;
+    int handle = direct_art_upload(padded, 256, 256);
     cJSON_ReplaceItemInObject(*result, "handle", cJSON_CreateNumber(handle));
-    cJSON_AddNumberToObject(*result, "width", w);
-    cJSON_AddNumberToObject(*result, "height", h);
+    cJSON_AddNumberToObject(*result, "width", 256);
+    cJSON_AddNumberToObject(*result, "height", 256);
     break;
   }
   return true;
@@ -752,6 +792,7 @@ static bool command_handle(const cJSON *command, cJSON **result, char *error,
     *result = hello_result(true);
     return true;
   }
+  if (strcmp(type, "info") == 0) return info_command(command, result, error, error_capacity);
   if (strcmp(type, "art") == 0) return art_command(command, result);
   if (strcmp(type, "list") == 0)
     return list_command(command, result, error, error_capacity);

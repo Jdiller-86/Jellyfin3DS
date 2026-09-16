@@ -11,6 +11,7 @@ import {
   type DirectMediaStatus,
   type Hello,
   type Item,
+  type Metadata,
   type Page,
   PAGE_SIZE,
   time,
@@ -47,14 +48,63 @@ function App() {
   const [controls, setControls] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [volume, setVolume] = createSignal(0.8);
-  let history: { location: Location; page: Page; index: number }[] = [];
+  let history: { location: Location; page: Page; index: number; scroll: number }[] = [];
   let frame = 0;
   let session = 0;
   let operation = 0;
   let plane: NodeMirror | undefined;
   let artPlane: NodeMirror | undefined;
   const [art, setArt] = createSignal<{handle:number;width:number;height:number}>();
-  let artWanted = "", artAge = 0, artPending = false, dragY = 0;
+  let artWanted = "", artAge = 0, artPending = false, artAttempted = "";
+  const [metadata, setMetadata] = createSignal<Metadata>({});
+  let infoWanted = "", infoAge = 0, infoPending = false, infoAttempted = "";
+  const [scrollY, setScrollY] = createSignal(0);
+  const [fetchingMore, setFetchingMore] = createSignal(false);
+  let scrollTarget = 0, velocity = 0, dragging = false, listGeneration = 0, retryAfter = 0;
+  const rowHeight = 28, listHeight = 140;
+  const maxScroll = () => Math.max(0, page().items.length * rowHeight - listHeight);
+  const clampScroll = (value: number) => Math.max(0, Math.min(maxScroll(), value));
+  function resetScroll(value = 0) { velocity = 0; dragging = false; scrollTarget = clampScroll(value); setScrollY(scrollTarget); }
+  function focusRow(row: number) {
+    setIndex(row);
+    if (row * rowHeight < scrollTarget) scrollTarget = row * rowHeight;
+    else if ((row + 1) * rowHeight > scrollTarget + listHeight) scrollTarget = (row + 1) * rowHeight - listHeight;
+    scrollTarget = clampScroll(scrollTarget);
+    velocity = 0;
+  }
+  function nowPlaying() { if (playing()) { setDetail(undefined); setControls(true); velocity = 0; } }
+  function prefetch() {
+    if (fetchingMore() || busy() || frame < retryAfter || screen() !== "browser" || controls() || detail()) return;
+    const current = page();
+    const backwards = scrollY() < 56 && current.offset > 0;
+    if (!backwards && (scrollY() < maxScroll() - 84 || current.offset + current.items.length >= current.total)) return;
+    const offset = backwards ? Math.max(0, current.offset - PAGE_SIZE) : current.offset + current.items.length;
+    const generation = listGeneration;
+    setFetchingMore(true);
+    const request = rpc.request("jellyfin.command", JSON.stringify({t:"list", ...where(), offset}), result => {
+      if (generation !== listGeneration) return;
+      setFetchingMore(false);
+      if (!result.ok) { retryAfter = frame + 180; setMessage("Could not load more. Scroll to retry."); return; }
+      try {
+        const next = JSON.parse(result.value) as Page;
+        if (!next.items.length) { retryAfter = frame + 300; return; }
+        let items = backwards ? [...next.items, ...current.items] : [...current.items, ...next.items];
+        let first = backwards ? next.offset : current.offset;
+        let shift = backwards ? next.items.length : 0;
+        // Keep memory and the back stack bounded on original 3DS systems.
+        if (items.length > 40) {
+          const excess = items.length - 40;
+          if (backwards) items = items.slice(0, 40);
+          else { items = items.slice(excess); first += excess; shift -= excess; }
+        }
+        setPage({items, offset:first, total:next.total});
+        setIndex(Math.max(0, index() + shift));
+        setScrollY(clampScroll(scrollY() + shift * rowHeight));
+        scrollTarget = clampScroll(scrollTarget + shift * rowHeight);
+      } catch { retryAfter = frame + 180; }
+    });
+    if (!request) { setFetchingMore(false); retryAfter = frame + 30; }
+  }
 
 
   function editField(field: "server" | "username" | "password" | "search") {
@@ -110,11 +160,13 @@ function App() {
 
   function load(location: Location, selectedIndex = 0) {
     if (busy() || !authenticated()) return;
+    listGeneration++; setFetchingMore(false); retryAfter = 0;
     command({ t: "list", ...location }, (data: Page) => {
       setScreen("browser");
       setWhere(location);
       setPage(data);
       setIndex(Math.min(selectedIndex, Math.max(0, data.items.length - 1)));
+      resetScroll();
       setDetail(undefined);
       setControls(false);
     });
@@ -184,7 +236,7 @@ function App() {
     if (busy()) return;
     if (item.folder) {
       if (history.length >= 16) history.shift();
-      history.push({ location: where(), page: page(), index: index() });
+      history.push({ location: where(), page: page(), index: index(), scroll: scrollY() });
       load({ mode: "folder", title: item.name, parent: item.id, offset: 0 });
     } else {
       setDetail(item);
@@ -267,7 +319,8 @@ function App() {
     }
     const previous = history.pop();
     if (previous) {
-      setWhere(previous.location); setPage(previous.page); setIndex(previous.index);
+      listGeneration++; setFetchingMore(false);
+      setWhere(previous.location); setPage(previous.page); setIndex(previous.index); resetScroll(previous.scroll);
       setDetail(undefined); setControls(false); setMessage("");
     }
     else home("libraries");
@@ -276,10 +329,8 @@ function App() {
   function move(delta: number) {
     if (busy() || screen() !== "browser" || controls() || detail()) return;
     const next = index() + delta;
-    if (next >= 0 && next < page().items.length) { setIndex(next); return; }
-    const offset = page().offset + delta;
-    if (offset >= 0 && offset + (delta > 0 ? PAGE_SIZE - 1 : 0) < page().total)
-      load({ ...where(), offset }, delta > 0 ? PAGE_SIZE - 1 : 0);
+    if (next >= 0 && next < page().items.length) focusRow(next);
+    prefetch();
   }
 
   function changeVolume(delta: number) {
@@ -307,21 +358,30 @@ function App() {
   onButtonPress(BTN.TRIANGLE, () => screen() === "browser" && !busy() && editField("search"));
   onButtonPress(BTN.SQUARE, () => screen() === "browser" && home("resume"));
   onButtonPress(BTN.START, pause);
-  onButtonPress(BTN.SELECT, () => playing() ? setControls(!controls()) : showSetup());
+  onButtonPress(BTN.SELECT, () => playing() ? (controls() ? setControls(false) : nowPlaying()) : showSetup());
   onButtonPress(BTN.LTRIGGER, () => seek(-10));
   onButtonPress(BTN.RTRIGGER, () => seek(10));
 
   createGesture({
     surface: "auxiliary",
     axis: "y",
-    onPanStart: () => { dragY = 0; },
+    onPanStart: (contact) => {
+      dragging = screen() === "browser" && !controls() && !detail() && contact.startY >= 48 && contact.startY < 188;
+      velocity = 0;
+    },
     onPanMove: (contact) => {
-      if (busy() || contact.startY < 48 || contact.startY >= 188) return;
-      dragY += contact.fdy;
-      if (Math.abs(dragY) >= 24) { move(dragY < 0 ? 1 : -1); dragY = 0; }
+      if (!dragging) return;
+      scrollTarget = clampScroll(scrollY() - contact.fdy);
+      setScrollY(scrollTarget);
+      setIndex(Math.min(page().items.length - 1, Math.max(0, Math.floor((scrollTarget + 56) / rowHeight))));
+    },
+    onPanEnd: (contact) => {
+      if (dragging) velocity = Math.max(-12, Math.min(12, -contact.vy / 60));
+      dragging = false;
     },
     onTap: (contact) => {
       if (busy()) return;
+      velocity = 0; scrollTarget = scrollY();
       if (screen() === "setup") {
         let chosen = -1;
         if (contact.y >= 43 && contact.y < 82) chosen = 0;
@@ -343,6 +403,7 @@ function App() {
         else showSetup();
         return;
       }
+      if (!controls() && playing() && contact.y >= 192 && contact.y < 220 && contact.x >= 100) { nowPlaying(); return; }
       if (controls()) {
         if (contact.y >= 82 && contact.y < 126) {
           if (contact.x < 100) seek(-10);
@@ -359,51 +420,75 @@ function App() {
       }
       if (detail()) {
         if (contact.y >= 76 && contact.y < 116) play(detail()!, detail()!.resume);
-        else if (contact.y >= 122 && contact.y < 162) play(detail()!, 0);
-        else if (contact.y >= 170 && contact.y < 213) back();
+        else if (contact.y >= 122 && contact.y < 162 && detail()!.resume > 0) play(detail()!, 0);
+        else if (contact.y >= 170 && contact.y < 213) { if (playing() && contact.x >= 160) nowPlaying(); else back(); }
         return;
       }
       if (contact.y >= 48 && contact.y < 188) {
-        const item = page().items[Math.floor((contact.y - 48) / 28)];
+        const item = page().items[Math.floor((contact.y - 48 + scrollY()) / rowHeight)];
         if (item) {
-          const row = Math.floor((contact.y - 48) / 28);
+          const row = Math.floor((contact.y - 48 + scrollY()) / rowHeight);
           if (row === index()) open(item); else setIndex(row);
         }
       }
       if (contact.y >= 192 && contact.y < 220) {
-        if (contact.x < 105) move(-1);
-        else if (contact.x < 215) back();
-        else move(1);
+        back();
       }
     },
   });
 
   onFrame(() => {
     frame++;
-    const wanted = !playing() && screen() === "browser" ? (selected()?.artId ?? selected()?.id ?? "") : "";
-    if (wanted !== artWanted) { artWanted = wanted; artAge = 0; setArt(undefined); }
+    if (!dragging && !controls() && !detail()) {
+      if (Math.abs(velocity) > 0.15) {
+        const next = clampScroll(scrollY() + velocity);
+        if (next === scrollY()) velocity = 0;
+        setScrollY(next); scrollTarget = next; velocity *= 0.90;
+        setIndex(Math.min(page().items.length - 1, Math.max(0, Math.floor((next + 56) / rowHeight))));
+      } else {
+        velocity = 0;
+        const difference = scrollTarget - scrollY();
+        if (Math.abs(difference) > 0.25) setScrollY(scrollY() + difference * 0.3);
+        else if (difference) setScrollY(scrollTarget);
+      }
+    }
+    prefetch();
+    const infoKey = screen() === "browser" && !controls() ? selected()?.id ?? "" : "";
+    if (infoKey !== infoWanted) { infoWanted = infoKey; infoAge = 0; infoAttempted = ""; setMetadata({}); }
+    infoAge++;
+    if (infoKey && infoAge >= 18 && !dragging && !velocity && !infoPending && !busy() && infoAttempted !== infoKey) {
+      const key = infoKey; infoPending = true;
+      const id = rpc.request("jellyfin.command", JSON.stringify({t:"info", id:key}), result => {
+        infoPending = false;
+        if (key !== infoWanted || !result.ok) return;
+        try { setMetadata(JSON.parse(result.value)); } catch { /* Metadata is optional. */ }
+      });
+      if (id) infoAttempted = key; else infoPending = false;
+    }
+    const wanted = !playing() && screen() === "browser" ? selected()?.id ?? "" : "";
+    if (wanted !== artWanted) { artWanted = wanted; artAge = 0; artAttempted = ""; setArt(undefined); }
     artAge++;
-    if (wanted && artAge === 24 && !artPending && !busy() && rpc.connected()) {
+    if (wanted && artAge >= 30 && !artPending && !infoPending && !dragging && !velocity && !busy() && rpc.connected() && artAttempted !== wanted) {
       artPending = true;
       const key = wanted;
-      const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key}), result => {
+      const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key, fallback:metadata().artId ?? selected()?.artId}), result => {
         artPending = false;
         if (key !== artWanted || !result.ok) return;
         try {
           const value = JSON.parse(result.value);
-          if (value.handle >= 0 && value.width > 0 && value.height > 0) {
+          if (value.handle >= 0) {
             setArt(value);
             if (artPlane) getOps().setImage(artPlane.id, value.handle);
           }
         } catch { /* Keep the placeholder when artwork is missing. */ }
       });
-      if (!request) artPending = false;
+      if (request) artAttempted = wanted; else artPending = false;
     }
-    if (wanted && !art() && (artPending || busy()) && artAge >= 24) artAge = 23;
 
     const current = rpc.session();
     if (current !== session) {
-      operation++;
+      operation++; listGeneration++; setFetchingMore(false);
+      infoWanted = artWanted = infoAttempted = artAttempted = ""; setArt(undefined); setMetadata({});
       setBusy(false);
       setProviderReady(current > 0);
       player.close();
@@ -452,6 +537,9 @@ function App() {
 
   onCleanup(() => player.close());
   const selected = () => detail() ?? page().items[index()];
+  const visibleRows = () => page().items.slice(Math.floor(scrollY() / rowHeight), Math.floor(scrollY() / rowHeight) + 6);
+  const subtitle = () => [metadata().series, metadata().episode ? `S${metadata().season ?? 0} E${metadata().episode}` : "", selected()?.year, metadata().rating, selected()?.seconds ? `${Math.round(selected()!.seconds / 60)} min` : "", metadata().genre].filter(Boolean).join(" · ");
+  const overview = () => (metadata().overview ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const label = (value: string) => value.length > 40 ? `${value.slice(0, 37)}...` : value;
   const passwordLabel = () => password().length ? "*".repeat(Math.min(24, password().length)) : "Password";
   const videoRect = () => {
@@ -483,13 +571,14 @@ function App() {
       </View>
       <Show when={!playing() && screen() === "browser"}>
         <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
-          <View class="absolute left-[59] top-[6] w-[256] h-[144] rounded-lg bg-[#edf3f6] items-center justify-center">
-            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : "Jellyfin3DS"}</Text>
+          <View class="absolute left-[59] top-[4] w-[256] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center" style={{height:detail()?100:144}}>
+            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : selected()?.type ?? "Library"}</Text>
+            <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
+              class="absolute top-0" style={{insetL:detail()?39:0,width:detail()?178:256,height:detail()?178:256,opacity:art()?1:0}} />
           </View>
-          <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
-            class="absolute" style={{insetL:59+(256-(art()?.width ?? 256))/2,insetT:6+(144-(art()?.height ?? 144))/2,width:art()?.width ?? 256,height:art()?.height ?? 144,opacity:art()?1:0}} />
-          <Text class="absolute left-[12] top-[158] text-base text-[#3c4954] font-bold">{label(selected()?.name ?? "Library")}</Text>
-          <Text class="absolute left-[12] top-[184] text-xs text-[#75409b]">{selected() ? `${selected()!.type}${selected()!.year ? ` / ${selected()!.year}` : ""}${selected()!.resume ? ` / Resume ${time(selected()!.resume)}` : ""}` : "Select an item"}</Text>
+          <Text class="absolute left-[12] text-sm text-[#3c4954] font-bold" style={{insetT:detail()?111:151}}>{label(selected()?.name ?? "Library")}</Text>
+          <Text class="absolute left-[12] text-xs text-[#75409b]" style={{insetT:detail()?135:174}}>{subtitle().slice(0, 56)}</Text>
+          <Text class="absolute left-[12] right-[12] text-xs text-[#6a7680]" style={{insetT:detail()?154:192}}>{overview().length > (detail()?165:54) ? overview().slice(0, detail()?162:51) + "..." : overview()}</Text>
         </View>
       </Show>
       <Show when={screen() === "boot"}>
@@ -540,17 +629,22 @@ function App() {
           <Text class="absolute left-[8] top-[33] text-xs text-[#6a7680]">{label(where().title)}</Text>
           <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#dde5eb]" />
           <View class="absolute right-[1] w-[3] h-[12] bg-[#aa5cc3]" style={{insetT:48+128*(page().offset+index())/Math.max(1,page().total-1)}} />
-          <For each={page().items}>{(item, row) => <View style={{ insetT: 48 + row() * 28 }} class={row() === index() ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
-            <Text class="absolute left-[6] top-[5] text-xs text-[#3c4954]">{item.folder ? "> " : "  "}{label(item.name)}</Text>
-          </View>}</For>
-          <Show when={!page().items.length}><Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{providerReady() ? "No items" : "Starting…"}</Text></Show>
-          <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-xs text-[#3c4954]">Up</Text><Text class="text-xs text-[#3c4954]">Back [B]</Text><Text class="text-xs text-[#3c4954]">Down</Text></View>
+          <View class="absolute left-0 right-[4] top-[48] h-[140] overflow-hidden">
+            <For each={visibleRows()}>{item => <View style={{ insetT: page().items.indexOf(item) * rowHeight - scrollY() }} class={item === page().items[index()] ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
+              <Text class="absolute left-[6] top-[5] text-xs text-[#3c4954]">{item.folder ? "> " : item.played ? "✓ " : "  "}{label(item.name)}</Text>
+              <Show when={item.resume > 0 && item.seconds > 0}><View class="absolute left-[4] bottom-0 h-[2] bg-[#aa5cc3]" style={{width:Math.min(288, 288 * item.resume / item.seconds)}} /></Show>
+            </View>}</For>
+          </View>
+          <Show when={!page().items.length}><Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{busy() ? "Loading…" : where().mode === "search" ? "No results" : "No items"}</Text></Show>
+          <Show when={fetchingMore()}><View class="absolute left-[120] top-[168] w-[80] h-[20] rounded-lg bg-white items-center justify-center"><Text class="text-xs text-[#75409b]">Loading…</Text></View></Show>
+          <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-xs text-[#3c4954]">Back [B]</Text><Text class="text-xs text-[#75409b]">{playing() ? "Now playing [SELECT]" : `${page().total} items`}</Text></View>
         </Show>
         <Show when={detail() && !controls()}>
           <Text class="absolute left-[10] top-[43] text-xs text-[#3c4954]">{label(detail()!.name)}</Text>
           <View class="absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
-          <View class="absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Start over</Text></View>
-          <View class="absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Back [B]</Text></View>
+          <Show when={detail()!.resume > 0}><View class="absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Start over</Text></View></Show>
+          <Show when={!detail()!.resume}><Text class="absolute left-[12] right-[12] top-[121] text-xs text-[#6a7680]">{overview().slice(0, 145)}</Text></Show>
+          <View class="absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">{playing() ? "Back / Now playing" : "Back [B]"}</Text></View>
         </Show>
         <Show when={controls()}>
           <Text class="absolute left-[10] top-[40] text-xs text-[#3c4954]">{label(playing()?.name ?? "")}</Text>
