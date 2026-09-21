@@ -44,3 +44,22 @@ Safe splash removal remains blocked on an authenticated blank archive. Upstream
 https://github.com/yellows8/ctr-logobuilder documents an HMAC footer requiring a
 HOME Menu-derived key. No such key or verified blank archive is in this build.
 Retaining the proven resource avoids repeating the earlier launch regression.
+
+## v0.3.1
+
+The user reports artwork still missing and unchanged beeping in v0.3.0. Its
+banner PCM had been verified silent; the source did not prove what version was
+installed/cached or which sound was heard. v0.3.1 removes the CWAV block and
+checks its pointer is zero in the final CIA, and adds an in-app version label.
+
+Artwork authentication is modernized; fallback transfers are split across RPCs
+to stay below the offload deadline. Native tests cover resize/padding bounds.
+The UI test exercises a missing first image followed by a successful fallback.
+
+MVD config/render must occur after a frame-ready result, following libctru and
+ThirdTube. The mocked native test rejects early configuration and rendering on
+MVD_STATUS_OK, and checks delimiter filtering and malformed AVCC rejection.
+New models enable MVD; original models retain software. Holding L at startup
+forces software. These checks do not establish hardware success: real-console
+MVD playback, image fetches against the user's server, and audible behavior
+remain unverified.

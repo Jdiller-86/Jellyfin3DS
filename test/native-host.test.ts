@@ -25,7 +25,7 @@ test("native decoder keeps authentication in a header and verifies TLS", () => {
   const source = transformVideoSource(
     readFileSync(`${reference}/src/video/video_player.c`, "utf8"),
   );
-  expect(source).toContain("X-Emby-Token: %s");
+  expect(source).toContain("Authorization: MediaBrowser Token=");
   expect(source).toContain("CURLOPT_SSL_VERIFYPEER, 1L");
   expect(source).toContain('CURLOPT_CAINFO, "romfs:/cacert.pem"');
   expect(source).not.toContain("CURLOPT_SSL_VERIFYPEER, 0L");

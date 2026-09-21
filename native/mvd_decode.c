@@ -40,6 +40,7 @@ bool mvd_is_available(void)
 bool mvd_init(mvd_ctx_t *ctx, int width, int height)
 {
     memset(ctx, 0, sizeof(*ctx));
+    if (width < 1 || height < 1 || width > 512 || height > 256) return false;
 
     ctx->width = ALIGN16(width);
     ctx->height = ALIGN16(height);
@@ -97,7 +98,7 @@ void mvd_cleanup(mvd_ctx_t *ctx)
 
 bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_size)
 {
-    if (!extradata || extradata_size < 8)
+    if (!ctx->initialized || !extradata || extradata_size < 8 || extradata[0] != 1)
         return false;
 
     /* AVCC extradata layout:
@@ -191,10 +192,8 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
                                 (uint32_t)data[src_off + 3];
             src_off += 4;
 
-            if ((int)(src_off + nal_size) > size)
-                break;
-            if ((int)(dst_off + 3 + nal_size) > ctx->nal_buf_size)
-                break;
+            if (!nal_size || nal_size > (uint32_t)(size - src_off) ||
+                nal_size > (uint32_t)(ctx->nal_buf_size - dst_off - 3)) return false;
 
             ctx->nal_buf[dst_off++] = 0x00;
             ctx->nal_buf[dst_off++] = 0x00;
@@ -204,6 +203,7 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
             dst_off += nal_size;
             src_off += nal_size;
         }
+        if (src_off != size) return false;
     }
 
     if (dst_off == 0)
@@ -224,7 +224,9 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
                                  NULL, NULL, NULL);
     config.physaddr_outdata0 = osConvertVirtToPhys(ctx->frame_buf[ctx->frame_write_idx]);
 
-    if (MVDSTD_SetConfig(&config) != MVD_STATUS_OK) return false;
+    /* Do not configure/render before SPS/PPS and a ready frame. The MVD
+     * system process treats an early rendering request as a fatal state. */
+    GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], ctx->width * ctx->height * 2);
 
     /* Flush cache and feed NAL to MVD */
     GSPGPU_FlushDataCache(ctx->nal_buf, dst_off);
@@ -245,13 +247,16 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
             ++end;
         }
         if (end <= start + prefix || (ctx->nal_buf[start+prefix] & 0x80)) return false;
+        unsigned type = ctx->nal_buf[start+prefix] & 31;
+        /* TS access-unit delimiters, filler and SEI are not decoded pictures. */
+        if (type != 1 && type != 5 && type != 7 && type != 8) { start = end; continue; }
         /* MVD expects the new FCRAM alias, and a three-byte Annex B prefix. */
         u8 *unit = ctx->nal_buf + start + (prefix == 4 ? 1 : 0);
         void *mapped = osConvertOldLINEARMemToNew(unit);
         if (!mapped) return false;
         ret = mvdstdProcessVideoFrame(mapped, (size_t)(ctx->nal_buf + end - unit), 0, NULL);
         if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
-        if (ret != MVD_STATUS_PARAMSET) decoded = true;
+        if (ret == MVD_STATUS_FRAMEREADY) decoded = true;
         start = end;
     }
 
@@ -273,8 +278,8 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
         if (frame_count <= 5 || frame_count % 100 == 0) {
             log_write("MVD: RenderFrame ret=0x%08lX", (unsigned long)ret);
         }
-        if (R_SUCCEEDED(ret) || ret == MVD_STATUS_OK) {
-            GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx],
+        if (ret == MVD_STATUS_OK) {
+            GSPGPU_InvalidateDataCache(ctx->frame_buf[ctx->frame_write_idx],
                                    ctx->width * ctx->height * 2);
             ctx->frame_write_idx ^= 1; /* swap double buffer */
             ctx->frame_ready = true;

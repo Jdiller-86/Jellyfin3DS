@@ -5,6 +5,7 @@
 #include "soc.h"
 #include "direct_media.h"
 #include "artwork.h"
+#include "util/log.h"
 #include "cJSON.h"
 
 #include <3ds.h>
@@ -26,7 +27,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.0"
+#define APP_VERSION "0.3.1"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -682,13 +683,22 @@ static bool art_command(const cJSON *command, cJSON **result) {
   cJSON_AddNumberToObject(*result, "handle", -1);
   const char *id = json_string(command, "id");
   if (!authenticated() || !valid_id(id)) return true;
-  char suffix[256], url[SERVER_MAX + 256], token[320];
-  snprintf(token, sizeof token, "X-Emby-Token: %s", config.token);
+  char suffix[256], url[SERVER_MAX + 256], token[768];
+  snprintf(token, sizeof token,
+    "Authorization: MediaBrowser Client=\"Jellyfin3DS\", Device=\"Nintendo 3DS\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"",
+    config.device_id, APP_VERSION, config.token);
   const char *fallback = json_string(command, "fallback");
   const char *kinds[] = {"Primary", "Backdrop", "Thumb"};
-  for (int kind = 0; kind < (valid_id(fallback) && strcmp(fallback, id) ? 6 : 3); ++kind) {
+  int attempts = valid_id(fallback) && strcmp(fallback, id) ? 6 : 3;
+  int kind = (int)json_number(command, "candidate", 0);
+  if (kind < 0 || kind >= attempts) return true;
+  cJSON_AddNumberToObject(*result, "next", kind + 1 < attempts ? kind + 1 : -1);
+  cJSON_AddStringToObject(*result, "error", "Artwork unavailable");
+  /* One HTTP attempt per RPC: six slow fallbacks must not exceed the
+   * framework's ten-second request lifetime and discard a successful upload. */
+  do {
     const char *image_id = kind < 3 ? id : fallback;
-    snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=png", image_id, kinds[kind % 3]);
+    snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=jpg&Quality=80", image_id, kinds[kind % 3]);
     if (!make_url(url, sizeof url, config.server, suffix)) break;
     CURL *curl = curl_easy_init();
     if (!curl) break;
@@ -696,10 +706,11 @@ static bool art_command(const cJSON *command, cJSON **result) {
     struct curl_slist *headers = curl_slist_append(NULL, token);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin3DS/" APP_VERSION);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 1500L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 2500L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
@@ -709,11 +720,18 @@ static bool art_command(const cJSON *command, cJSON **result) {
     CURLcode code = curl_easy_perform(curl);
     long status = 0; curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl); curl_slist_free_all(headers);
+    log_write("ART candidate=%d http=%ld curl=%d bytes=%lu", kind, status, (int)code, (unsigned long)body.size);
+    if (status == 401 || status == 403) {
+      cJSON_ReplaceItemInObject(*result, "next", cJSON_CreateNumber(-1));
+      cJSON_ReplaceItemInObject(*result, "error", cJSON_CreateString("Artwork access denied"));
+    } else if (code != CURLE_OK) {
+      cJSON_ReplaceItemInObject(*result, "error", cJSON_CreateString("Artwork network error"));
+    }
     int w = 0, h = 0, channels = 0;
     uint8_t *pixels = NULL;
     if (code == CURLE_OK && status == 200 && body.data &&
         stbi_info_from_memory((uint8_t *)body.data, body.size, &w, &h, &channels) &&
-        w > 0 && h > 0 && w <= 256 && h <= 144)
+        w > 0 && h > 0 && w <= 512 && h <= 512)
       pixels = stbi_load_from_memory((uint8_t *)body.data, body.size, &w, &h, &channels, 4);
     free(body.data);
     if (!pixels) continue;
@@ -721,11 +739,13 @@ static bool art_command(const cJSON *command, cJSON **result) {
     stbi_image_free(pixels);
     if (!padded) continue;
     int handle = direct_art_upload(padded, 256, 256);
+    log_write("ART decoded=%dx%d handle=%d", w, h, handle);
+    if (handle < 0) cJSON_ReplaceItemInObject(*result, "error", cJSON_CreateString("Artwork upload failed"));
     cJSON_ReplaceItemInObject(*result, "handle", cJSON_CreateNumber(handle));
     cJSON_AddNumberToObject(*result, "width", 256);
     cJSON_AddNumberToObject(*result, "height", 256);
     break;
-  }
+  } while (0);
   return true;
 }
 

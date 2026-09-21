@@ -55,6 +55,8 @@ function App() {
   let plane: NodeMirror | undefined;
   let artPlane: NodeMirror | undefined;
   const [art, setArt] = createSignal<{handle:number;width:number;height:number}>();
+  const [artError, setArtError] = createSignal("");
+  let artCandidate = 0;
   let artWanted = "", artAge = 0, artPending = false, artAttempted = "";
   const [metadata, setMetadata] = createSignal<Metadata>({});
   let infoWanted = "", infoAge = 0, infoPending = false, infoAttempted = "";
@@ -456,7 +458,7 @@ function App() {
     const infoKey = screen() === "browser" && !controls() ? selected()?.id ?? "" : "";
     if (infoKey !== infoWanted) { infoWanted = infoKey; infoAge = 0; infoAttempted = ""; setMetadata({}); }
     infoAge++;
-    if (infoKey && infoAge >= 18 && !dragging && !velocity && !infoPending && !busy() && infoAttempted !== infoKey) {
+    if (infoKey && infoAge >= 18 && !dragging && !velocity && !infoPending && !busy() && !fetchingMore() && rpc.pending() === 0 && infoAttempted !== infoKey) {
       const key = infoKey; infoPending = true;
       const id = rpc.request("jellyfin.command", JSON.stringify({t:"info", id:key}), result => {
         infoPending = false;
@@ -466,20 +468,23 @@ function App() {
       if (id) infoAttempted = key; else infoPending = false;
     }
     const wanted = !playing() && screen() === "browser" ? selected()?.id ?? "" : "";
-    if (wanted !== artWanted) { artWanted = wanted; artAge = 0; artAttempted = ""; setArt(undefined); }
+    if (wanted !== artWanted) { artWanted = wanted; artAge = 0; artAttempted = ""; artCandidate = 0; setArtError("Loading artwork…"); setArt(undefined); }
     artAge++;
-    if (wanted && artAge >= 30 && !artPending && !infoPending && !dragging && !velocity && !busy() && rpc.connected() && artAttempted !== wanted) {
+    if (wanted && artAge >= 30 && !artPending && !infoPending && !dragging && !velocity && !busy() && !fetchingMore() && rpc.pending() === 0 && rpc.connected() && artAttempted !== wanted) {
       artPending = true;
       const key = wanted;
-      const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key, fallback:metadata().artId ?? selected()?.artId}), result => {
+      const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key, candidate:artCandidate, fallback:metadata().artId ?? selected()?.artId}), result => {
         artPending = false;
-        if (key !== artWanted || !result.ok) return;
+        if (key !== artWanted) return;
+        if (!result.ok) { setArtError("Artwork request failed"); return; }
         try {
           const value = JSON.parse(result.value);
           if (value.handle >= 0) {
-            setArt(value);
+            setArt(value); setArtError("");
             if (artPlane) getOps().setImage(artPlane.id, value.handle);
-          }
+          } else if (Number.isInteger(value.next) && value.next >= 0 && value.next < 6) {
+            artCandidate = value.next; artAttempted = ""; artAge = 0;
+          } else setArtError(value.error || "No artwork");
         } catch { /* Keep the placeholder when artwork is missing. */ }
       });
       if (request) artAttempted = wanted; else artPending = false;
@@ -572,7 +577,7 @@ function App() {
       <Show when={!playing() && screen() === "browser"}>
         <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
           <View class="absolute left-[59] top-[4] w-[256] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center" style={{height:detail()?100:144}}>
-            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : selected()?.type ?? "Library"}</Text>
+            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
             <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
               class="absolute top-0" style={{insetL:detail()?39:0,width:detail()?178:256,height:detail()?178:256,opacity:art()?1:0}} />
           </View>
@@ -598,7 +603,7 @@ function App() {
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup"}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account</Text></View>
+        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.1</Text></View>
         <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
         </View>
@@ -648,7 +653,7 @@ function App() {
         </Show>
         <Show when={controls()}>
           <Text class="absolute left-[10] top-[40] text-xs text-[#3c4954]">{label(playing()?.name ?? "")}</Text>
-          <Text class="absolute left-[10] top-[61] text-xs text-[#75409b]">{time((status()?.positionMs ?? 0) / 1000)} / {time(playing()?.seconds ?? 0)} - {status()?.phase ?? "opening"}</Text>
+          <Text class="absolute left-[10] top-[61] text-xs text-[#75409b]">{time((status()?.positionMs ?? 0) / 1000)} / {time(playing()?.seconds ?? 0)} - {status()?.phase ?? "opening"} · {status()?.hardware ? "MVD" : "CPU"}</Text>
           <View class="absolute left-[8] right-[8] top-[82] h-[44] bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">-10s</Text><Text class="text-sm text-[#3c4954]">{status()?.phase === "paused" ? "Resume" : "Pause"}</Text><Text class="text-sm text-[#3c4954]">+10s</Text></View>
           <View class="absolute left-[8] right-[8] top-[134] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Vol -</Text><Text class="text-sm text-[#75409b]">{Math.round(volume() * 100)}%</Text><Text class="text-sm text-[#3c4954]">Vol +</Text></View>
           <View class="absolute left-[8] right-[8] top-[180] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Browse</Text><Text class="text-sm text-[#3c4954]">Stop</Text></View>

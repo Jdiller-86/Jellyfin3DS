@@ -33,12 +33,12 @@ import hashlib
 assert hashlib.sha256(entries.get('logo', b'')).hexdigest() == \
     '62a5a1f9091aefb46b52e31fbeca2fdba9a99fe2473237e21e35b8d2e5659dff', \
     'Launch logo differs from the authenticated working baseline'
-assert struct.unpack_from('<H', exheader, 0xE)[0] == 8, 'CIA revision missing'
+assert struct.unpack_from('<H', exheader, 0xE)[0] == 9, 'CIA revision missing'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]
 assert title == 'Jellyfin3DS', f'Unexpected HOME Menu title: {title!r}'
-assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.3.0'
+assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.3.1'
 # SMDH stores tiled RGB565 pixels; histogram checks are independent of tiling.
 for offset, pixels in ((0x2040, 24*24), (0x24C0, 48*48)):
     colors = struct.unpack_from('<' + str(pixels) + 'H', icon, offset)
@@ -47,18 +47,6 @@ for offset, pixels in ((0x2040, 24*24), (0x24C0, 48*48)):
     assert colored > pixels // 8, 'Jellyfin gradient icon missing'
 banner = entries['banner']
 assert len(banner) > 256, 'Banner is empty'
-cwav_at = u32(banner, 0x84)
-assert banner[cwav_at:cwav_at+4] == b'CWAV', 'Banner sound pointer is invalid'
-cwav = banner[cwav_at:]
-info_at, data_at = u32(cwav, 24), u32(cwav, 36)
-assert cwav[info_at:info_at+4] == b'INFO' and cwav[data_at:data_at+4] == b'DATA'
-assert cwav[info_at+8:info_at+10] == b'\x01\x00', 'Chime must be non-looping PCM16'
-assert u32(cwav, info_at+12) == 22050 and u32(cwav, info_at+20) == 44100
-assert u32(cwav, info_at+28) == 1, 'Chime must be mono'
-import wave
-with wave.open('.pocket/banner/banner.wav') as wav:
-    pcm = wav.readframes(wav.getnframes())
-assert cwav[data_at+32:data_at+32+len(pcm)] == pcm, 'Packaged chime differs from source'
-samples = struct.unpack('<' + str(len(pcm)//2) + 'h', pcm)
-assert not any(samples), 'Banner must be silent'
+assert u32(banner, 0x84) == 0, 'Banner must contain no audio reference'
+assert b'CWAV' not in banner, 'Banner audio block was not removed'
 print('CIA verified: DSP mapping, Jellyfin3DS title, SMDH icon, CBMD banner')

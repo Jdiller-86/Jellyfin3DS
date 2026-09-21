@@ -41,4 +41,13 @@ export async function buildBanner(root: string) {
       "source/pc/stb_image.cpp","source/pc/stb_vorbis.cpp","source/pc/dr_wav.cpp","-o",executable],source);
   }
   await run([executable,"makebanner","-i",join(dir,"banner.png"),"-a",join(dir,"banner.wav"),"-o",join(dir,"banner.bnr")]);
+  // CBMD explicitly supports no audio (cwavOffset == 0). Remove the audio
+  // block entirely, rather than trusting that silent samples are being played.
+  const bannerPath=join(dir,"banner.bnr"), banner=readFileSync(bannerPath);
+  const audioOffset=banner.readUInt32LE(0x84);
+  if(audioOffset<0x88 || banner.toString("ascii",audioOffset,audioOffset+4)!=="CWAV") throw new Error("Invalid banner sound offset");
+  const graphics=Buffer.from(banner.subarray(0,audioOffset));
+  graphics.writeUInt32LE(0,0x84);
+  writeFileSync(bannerPath,graphics);
+
 }

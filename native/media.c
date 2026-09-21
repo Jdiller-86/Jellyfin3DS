@@ -1,5 +1,6 @@
 #include "media.h"
 #include "direct_media.h"
+#include "video/mvd_decode.h"
 #include "pocket_core.h"
 #include "video/video_player.h"
 #include "util/log.h"
@@ -190,8 +191,13 @@ bool media_start(void) {
   log_init();
   video_player_init();
   /* Never probe the New-only MVD service on original models. */
-  /* MVD can abort its system process; use the bounded software path until fixed. */
-  hardware_supported = false;
+  bool new_model = false;
+  hardware_supported = R_SUCCEEDED(APT_CheckNew3DS(&new_model)) && new_model;
+  /* Holding L during launch is a recovery override for hardware-specific issues. */
+  hidScanInput();
+  if (hidKeysHeld() & KEY_L) hardware_supported = false;
+  if (hardware_supported) hardware_supported = mvd_is_available();
+  log_write("DEC backend=%s", hardware_supported ? "MVD" : "software");
   MemInfo dsp_memory;
   PageInfo dsp_page;
   ndsp_result = svcQueryMemory(&dsp_memory, &dsp_page, 0x1ff50000);

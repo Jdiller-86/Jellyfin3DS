@@ -12,7 +12,8 @@ typedef struct { u32 physaddr_outdata0; } MVDSTD_Config;
 #define MVD_DEFAULT_WORKBUF_SIZE 4096
 #define MVD_STATUS_OK 0x17000
 #define MVD_STATUS_PARAMSET 0x17001
-#define MVD_CHECKNALUPROC_SUCCESS(x) ((x)==MVD_STATUS_OK || (x)==MVD_STATUS_PARAMSET)
+#define MVD_STATUS_FRAMEREADY 0x17003
+#define MVD_CHECKNALUPROC_SUCCESS(x) ((x)==MVD_STATUS_OK || (x)==MVD_STATUS_PARAMSET || (x)==MVD_STATUS_FRAMEREADY)
 #define R_FAILED(x) ((x)<0)
 #define R_SUCCEEDED(x) ((x)>=0)
 void *linearAlloc(size_t);
@@ -26,3 +27,5 @@ Result mvdstdProcessVideoFrame(void *,size_t,u32,void *);
 void mvdstdGenerateDefaultConfig(MVDSTD_Config *,int,int,int,int,void *,void *,void *);
 Result MVDSTD_SetConfig(MVDSTD_Config *);
 Result mvdstdRenderVideoFrame(MVDSTD_Config *,bool);
+
+void GSPGPU_InvalidateDataCache(const void *,size_t);
