@@ -193,9 +193,10 @@ bool media_start(void) {
   /* Never probe the New-only MVD service on original models. */
   bool new_model = false;
   hardware_supported = R_SUCCEEDED(APT_CheckNew3DS(&new_model)) && new_model;
-  /* Holding L during launch is a recovery override for hardware-specific issues. */
+  /* A system-service abort cannot be caught by the app. Require explicit
+   * opt-in until the repaired transport is verified on hardware. */
   hidScanInput();
-  if (hidKeysHeld() & KEY_L) hardware_supported = false;
+  if (!(hidKeysHeld() & KEY_R) || (hidKeysHeld() & KEY_L)) hardware_supported = false;
   if (hardware_supported) hardware_supported = mvd_is_available();
   log_write("DEC backend=%s", hardware_supported ? "MVD" : "software");
   MemInfo dsp_memory;

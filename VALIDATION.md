@@ -63,3 +63,18 @@ New models enable MVD; original models retain software. Holding L at startup
 forces software. These checks do not establish hardware success: real-console
 MVD playback, image fetches against the user's server, and audible behavior
 remain unverified.
+
+## v0.3.2
+
+The user reports another MVD system-service svcBreak in v0.3.1. The photo
+shows PC 00119ABC and a saved crash dump; a photo alone cannot establish the
+internal failing assertion. Inputs were submitted at base+1 or arbitrary NAL
+offsets; every unit now copies to the aligned allocation base before IPC.
+The native test asserts alignment. This remains a candidate hardware repair.
+Software is the default and R at launch opts New models into MVD testing.
+
+Cache tests cover the eight-entry cap, LRU eviction and account reset. The
+UI journey exercises neighbor preload and D-pad Back/Start over activation.
+Artwork is retained in memory only, capped at 2 MiB; preloading does not upload
+a GPU texture or replace the selected image. Real-console MVD and cache/UI
+behavior remain unverified.

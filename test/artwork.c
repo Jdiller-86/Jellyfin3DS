@@ -1,5 +1,7 @@
 #include "../native/artwork.h"
+#include "../native/art_cache.h"
 #include <assert.h>
+#include <stdio.h>
 int main(void) {
   uint8_t pixels[256 * 144 * 4]; memset(pixels, 157, sizeof pixels);
   uint8_t *image = artwork_canvas(pixels, 256, 144); assert(image);
@@ -15,4 +17,10 @@ int main(void) {
   image=artwork_canvas(big,512,512); assert(image);
   assert(image[56*4]==77 && image[55*4]==0 && image[200*4]==0);
   free(image);free(big);
+  char key[16];
+  for(int i=0;i<8;i++){ snprintf(key,sizeof key,"%d",i); art_cache_put(key,calloc(1,ART_CACHE_BYTES)); }
+  assert(art_cache_get("0"));
+  art_cache_put("8",calloc(1,ART_CACHE_BYTES));
+  assert(art_cache_get("0") && !art_cache_get("1") && art_cache_get("8"));
+  art_cache_clear(); assert(!art_cache_get("0") && !art_cache_get("8"));
 }

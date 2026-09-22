@@ -15,6 +15,7 @@ void GSPGPU_FlushDataCache(const void *p,size_t n) {}
 void GSPGPU_InvalidateDataCache(const void *p,size_t n) {}
 void log_write(const char *fmt,...) {}
 Result mvdstdProcessVideoFrame(void *p,size_t n,u32 f,void *o) {
+    assert(((uintptr_t)p & 3) == 0);
     assert((uintptr_t)p==(uintptr_t)converted+0x10000000);
     const unsigned char *bytes=converted;
     assert(n>=4 && bytes[0]==0 && bytes[1]==0 && bytes[2]==1);

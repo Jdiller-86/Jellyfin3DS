@@ -16,7 +16,7 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  g.ui=wasm.ops;g.__pak=await Bun.file("vendor/pocketjs/dist/3ds/guest/jellyfin3ds.pak").arrayBuffer();
  g.offload={session:()=>session,take:()=>replies.shift(),submit:(raw:string)=>{const r=JSON.parse(raw),c=JSON.parse(r.payload);commands.push(c);let value:any={};
  if(c.t==="keyboard")value={accepted:keyboardAccept,value:c.field==="search"?"Cosmos":c.field==="server"?"http://new-server:8096":c.value};
- if(c.t==="info")value={overview:"A young rabbit leaves his home and explores a colorful world.",rating:"PG",genre:"Animation"};if(c.t==="art")value=c.candidate===0?{handle:-1,next:1,error:"Artwork unavailable"}:{handle:artTexture,width:256,height:256};if(c.t==="hello")value={direct:true,authenticated:signedIn,server:"http://jellyfin.local:8096",username:"Mii"};if(c.t==="list")value={items:rows.slice(c.offset,c.offset+5),total:50,offset:c.offset};if(c.t==="play"){position=c.seconds;value={source:{host:"127.0.0.1",port:1,token:"0".repeat(64)},seconds:600,position};}
+ if(c.t==="info")value={overview:"A young rabbit leaves his home and explores a colorful world.",rating:"PG",genre:"Animation"};if(c.t==="art")value=c.preload?{cached:true}:c.candidate===0?{handle:-1,next:1,error:"Artwork unavailable"}:{handle:artTexture,width:256,height:256};if(c.t==="hello")value={direct:true,authenticated:signedIn,server:"http://jellyfin.local:8096",username:"Mii"};if(c.t==="list")value={items:rows.slice(c.offset,c.offset+5),total:50,offset:c.offset};if(c.t==="play"){position=c.seconds;value={source:{host:"127.0.0.1",port:1,token:"0".repeat(64)},seconds:600,position};}
  replies.push(JSON.stringify({id:r.id,payload:JSON.stringify(value)}));return true;}};
  g.media={open:()=>{opened++;phase="playing";return true;},close:()=>{phase="idle";},paused:(v:boolean)=>phase=v?"paused":"playing",volume:()=>{},texture:()=>texture,status:()=>JSON.stringify({phase,positionMs:position*1000,bufferedMs:1000,decodedFrames:opened?1:0,presentedFrames:phase!=="idle"?1:0,droppedFrames:0,receivedBytes:0,decodeMaxUs:0,audioUnderruns:0,hardware:true,videoWidth:400,videoHeight:224,error:""})};
  (0,eval)(await Bun.file("vendor/pocketjs/dist/3ds/guest/jellyfin3ds.js").text());
@@ -33,15 +33,18 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  signedIn=true;session=0;step();session=2;step(30);expect(commands.some(c=>c.t==="list")).toBe(true);await capture("browse");
  press(0x1);await capture("account");press(0x4000);
  for(let i=0;i<5;i++)press(0x40);expect(commands.filter(c=>c.t==="list").some(c=>c.offset===5)).toBe(true);
- step(80);expect(commands.some(c=>c.t==="art" && c.candidate===1)).toBe(true);
+ step(160);expect(commands.some(c=>c.t==="art" && c.candidate===1)).toBe(true);expect(commands.some(c=>c.preload)).toBe(true);
  expect(commands.some(c=>c.t==="info")).toBe(true);
  // Drag with intermediate positions, then release and allow inertial movement.
  const before=wasm.renderAuxiliary().slice();step(2,150,166);step(1,150,155);step(1,150,139);step(1,150,121);step(1,150,100);step(1,150,83);step(90);
  expect(wasm.renderAuxiliary().slice()).not.toEqual(before);
  await capture("scrolled");
- tap(60,62);tap(60,62);await capture("detail");press(0x2000);expect(opened).toBe(1);expect(position).toBe(12);await capture("player");
+ tap(60,62);tap(60,62);await capture("detail");
+ press(0x40);press(0x40);press(0x2000);expect(opened).toBe(0); // Back via D-pad.
+ press(0x2000);press(0x40);await capture("detail-focus");press(0x2000); // Start over.
+ expect(opened).toBe(1);expect(position).toBe(0);await capture("player");
  press(0x8);expect(phase).toBe("paused");press(0x8);expect(phase).toBe("playing");
- press(0x200);expect(opened).toBe(2);expect(position).toBe(22);
+ press(0x200);expect(opened).toBe(2);expect(position).toBe(10);
  press(0x1);await capture("playing-browse");
  tap(225,205);press(0x2000);expect(phase).toBe("paused");press(0x2000);expect(phase).toBe("playing");
  expect(opened).toBe(2);press(0x4000); // Back to browsing without reopening playback.

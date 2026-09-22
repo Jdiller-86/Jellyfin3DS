@@ -4,25 +4,23 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **No companion computer, phone, proxy, or Jellyfin plugin is needed after installation.** The 3DS connects to the Jellyfin server itself. The on-device implementation uses libcurl for the Jellyfin API, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes it with the FFmpeg/MVD path from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and sends audio to NDSP.
 
-**Targets original and New 3DS models.** Original models use software playback at 256×144/12 fps. This release restores the repaired MVD hardware path on New models, requesting up to 400×240/24 fps. Hold **L while launching** to force software playback if hardware causes trouble. Console testing is still required.
+**Targets original and New 3DS models.** Software playback is the default again after the reported MVD system-service crash. Hold **R while launching** on a New model to test the repaired experimental MVD path; **L** always forces software. A service abort cannot be recovered inside the app.
 
-## v0.3.1 artwork and MVD repair
+## v0.3.2 cache, controls and MVD transport
 
-Artwork now uses the same modern Authorization header as library requests. Each fallback is a separate bounded RPC, so slow/missing images do not exhaust the request deadline. PNG/JPEG responses up to 512×512 are resized into a valid texture. Missing images, access failures and upload failures are shown explicitly; HTTP/decode diagnostics are written without tokens to `sd:/3ds/jellyfin-3ds/debug.log`.
+- Eight decoded thumbnails are retained in a **2 MiB memory LRU cache**. Nearby rows preload one at a time after the selected artwork loads, while browsing is idle. Background requests have a two-second timeout and pause during playback. The cache clears on sign-in/account expiry; it does not write images to the SD card.
+- **D-pad Up/Down** now focuses Resume, Start over and Back; **A** activates the highlighted action. Items without a resume point skip Start over.
+- MVD inputs now use the aligned linear allocation base for every NAL unit. The previous code sometimes passed base+1 when trimming a four-byte prefix. This is a candidate repair, not a hardware-verified fix. A native test now rejects unaligned submissions.
 
-MVD previously configured/rendered before a decoded frame was ready. It now waits for `MVD_STATUS_FRAMEREADY`, skips non-picture TS delimiters, bounds input, and invalidates CPU output caches after DMA. The prior address-alias repair is retained. The player displays **MVD** or **CPU** next to its status.
-
-The banner has **no audio block**, rather than merely silent samples. Both the banner and Account screen identify **v0.3.1**. If this exact build still beeps on pressing A, record whether it occurs when highlighting the icon or only when launching: the console's own launch sound is separate from app banner audio. See clean-install instructions below.
-
-Continuous scrolling, Now playing, metadata and upstream Jellyfin service artwork remain included. The authenticated Homebrew launch splash remains unchanged to avoid the prior launch regression.
+Artwork errors and transfer diagnostics remain in `sd:/3ds/jellyfin-3ds/debug.log`. Both Account and the HOME Menu banner show **v0.3.2**. Banner audio remains removed; the authenticated launch splash is unchanged.
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.1` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.2` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.1/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.1" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.2/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.2" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.1/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.2/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

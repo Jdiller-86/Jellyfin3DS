@@ -5,6 +5,7 @@
 #include "soc.h"
 #include "direct_media.h"
 #include "artwork.h"
+#include "art_cache.h"
 #include "util/log.h"
 #include "cJSON.h"
 
@@ -27,7 +28,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.1"
+#define APP_VERSION "0.3.2"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -355,6 +356,7 @@ static cJSON *hello_result(bool persisted) {
 
 static bool login_command(const cJSON *command, cJSON **result, char *error,
                           size_t error_capacity) {
+  art_cache_clear();
   const char *server = json_string(command, "server");
   const char *username = json_string(command, "username");
   const char *password = json_string(command, "password");
@@ -414,6 +416,7 @@ static bool login_command(const cJSON *command, cJSON **result, char *error,
 }
 
 static void expire_session(void) {
+  art_cache_clear();
   config.token[0] = 0;
   config.user_id[0] = 0;
   playing_id[0] = 0;
@@ -678,11 +681,29 @@ static bool info_command(const cJSON *command, cJSON **result, char *error, size
 }
 
 /* Artwork is fetched only after selection settles; failures are a normal placeholder. */
+static void art_cached_reply(cJSON *reply, const uint8_t *pixels, bool preload) {
+  cJSON_AddBoolToObject(reply, "cached", true);
+  if (preload) return;
+  uint8_t *copy = malloc(ART_CACHE_BYTES);
+  if (!copy) return;
+  memcpy(copy,pixels,ART_CACHE_BYTES);
+  int handle=direct_art_upload(copy,256,256);
+  log_write("ART cached upload=%d",handle);
+  cJSON_ReplaceItemInObject(reply,"handle",cJSON_CreateNumber(handle));
+  cJSON_AddNumberToObject(reply,"width",256);
+  cJSON_AddNumberToObject(reply,"height",256);
+}
+
 static bool art_command(const cJSON *command, cJSON **result) {
   *result = cJSON_CreateObject();
   cJSON_AddNumberToObject(*result, "handle", -1);
   const char *id = json_string(command, "id");
   if (!authenticated() || !valid_id(id)) return true;
+  char key[129];
+  snprintf(key,sizeof key,"%s",id);
+  bool preload=json_bool(command,"preload",false);
+  uint8_t *cached=art_cache_get(key);
+  if(cached) { art_cached_reply(*result,cached,preload); return true; }
   char suffix[256], url[SERVER_MAX + 256], token[768];
   snprintf(token, sizeof token,
     "Authorization: MediaBrowser Client=\"Jellyfin3DS\", Device=\"Nintendo 3DS\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"",
@@ -709,8 +730,8 @@ static bool art_command(const cJSON *command, cJSON **result) {
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin3DS/" APP_VERSION);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 4000L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, preload ? 1000L : 2000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, preload ? 2000L : 4000L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
@@ -738,12 +759,10 @@ static bool art_command(const cJSON *command, cJSON **result) {
     uint8_t *padded = artwork_canvas(pixels, w, h);
     stbi_image_free(pixels);
     if (!padded) continue;
-    int handle = direct_art_upload(padded, 256, 256);
-    log_write("ART decoded=%dx%d handle=%d", w, h, handle);
-    if (handle < 0) cJSON_ReplaceItemInObject(*result, "error", cJSON_CreateString("Artwork upload failed"));
-    cJSON_ReplaceItemInObject(*result, "handle", cJSON_CreateNumber(handle));
-    cJSON_AddNumberToObject(*result, "width", 256);
-    cJSON_AddNumberToObject(*result, "height", 256);
+    art_cache_put(key,padded);
+    cached=art_cache_get(key);
+    if(cached) art_cached_reply(*result,cached,preload);
+    log_write("ART decoded=%dx%d preload=%d cached=%d",w,h,preload,cached!=NULL);
     break;
   } while (0);
   return true;

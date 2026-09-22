@@ -228,37 +228,45 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
      * system process treats an early rendering request as a fatal state. */
     GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], ctx->width * ctx->height * 2);
 
-    /* Flush cache and feed NAL to MVD */
-    GSPGPU_FlushDataCache(ctx->nal_buf, dst_off);
+    /* Preserve parsing bytes separately. Every IPC must use the aligned
+     * linear allocation base, never base+1 to trim a four-byte start code. */
+    uint8_t *packet = malloc(dst_off);
+    if (!packet) return false;
+    memcpy(packet, ctx->nal_buf, dst_off);
     Result ret = MVD_STATUS_PARAMSET;
     bool decoded = false;
     int start = 0;
     while (start < dst_off) {
         int prefix = 0;
-        if (start + 3 <= dst_off && !ctx->nal_buf[start] && !ctx->nal_buf[start+1]) {
-            if (ctx->nal_buf[start+2] == 1) prefix = 3;
-            else if (start + 4 <= dst_off && !ctx->nal_buf[start+2] && ctx->nal_buf[start+3] == 1) prefix = 4;
+        if (start + 3 <= dst_off && !packet[start] && !packet[start+1]) {
+            if (packet[start+2] == 1) prefix = 3;
+            else if (start + 4 <= dst_off && !packet[start+2] && packet[start+3] == 1) prefix = 4;
         }
-        if (!prefix) return false;
+        if (!prefix) { free(packet); return false; }
         int end = start + prefix;
         while (end < dst_off) {
-            if (end + 3 <= dst_off && !ctx->nal_buf[end] && !ctx->nal_buf[end+1] &&
-                (ctx->nal_buf[end+2] == 1 || (end + 4 <= dst_off && !ctx->nal_buf[end+2] && ctx->nal_buf[end+3] == 1))) break;
+            if (end + 3 <= dst_off && !packet[end] && !packet[end+1] &&
+                (packet[end+2] == 1 || (end + 4 <= dst_off && !packet[end+2] && packet[end+3] == 1))) break;
             ++end;
         }
-        if (end <= start + prefix || (ctx->nal_buf[start+prefix] & 0x80)) return false;
-        unsigned type = ctx->nal_buf[start+prefix] & 31;
-        /* TS access-unit delimiters, filler and SEI are not decoded pictures. */
+        if (end <= start + prefix || (packet[start+prefix] & 0x80)) { free(packet); return false; }
+        unsigned type = packet[start+prefix] & 31;
         if (type != 1 && type != 5 && type != 7 && type != 8) { start = end; continue; }
-        /* MVD expects the new FCRAM alias, and a three-byte Annex B prefix. */
-        u8 *unit = ctx->nal_buf + start + (prefix == 4 ? 1 : 0);
-        void *mapped = osConvertOldLINEARMemToNew(unit);
-        if (!mapped) return false;
-        ret = mvdstdProcessVideoFrame(mapped, (size_t)(ctx->nal_buf + end - unit), 0, NULL);
-        if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
+        size_t length = end - start - prefix;
+        ctx->nal_buf[0] = ctx->nal_buf[1] = 0; ctx->nal_buf[2] = 1;
+        memcpy(ctx->nal_buf + 3, packet + start + prefix, length);
+        GSPGPU_FlushDataCache(ctx->nal_buf, length + 3);
+        void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
+        if (!mapped || ((uintptr_t)mapped & 3)) { free(packet); return false; }
+        ret = mvdstdProcessVideoFrame(mapped, length + 3, 0, NULL);
+        static unsigned unit_logs;
+        if (unit_logs++ < 12 || !MVD_CHECKNALUPROC_SUCCESS(ret))
+            log_write("MVD unit=%u bytes=%lu status=%08lx", type, (unsigned long)length, (unsigned long)ret);
+        if (!MVD_CHECKNALUPROC_SUCCESS(ret)) { free(packet); return false; }
         if (ret == MVD_STATUS_FRAMEREADY) decoded = true;
         start = end;
     }
+    free(packet);
 
     static int frame_count = 0;
     frame_count++;

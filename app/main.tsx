@@ -42,6 +42,7 @@ function App() {
   const [where, setWhere] = createSignal<Location>({ mode: "libraries", title: "Libraries", offset: 0 });
   const [page, setPage] = createSignal<Page>({ items: [], offset: 0, total: 0 });
   const [index, setIndex] = createSignal(0);
+  const [detailFocus, setDetailFocus] = createSignal(0);
   const [detail, setDetail] = createSignal<Item>();
   const [playing, setPlaying] = createSignal<Item>();
   const [status, setStatus] = createSignal<PlayerStatus>();
@@ -57,6 +58,25 @@ function App() {
   const [art, setArt] = createSignal<{handle:number;width:number;height:number}>();
   const [artError, setArtError] = createSignal("");
   let artCandidate = 0;
+  const preloadState = new Map<string,{candidate:number;until:number}>();
+  let preloadPending = false;
+  function preloadArtwork() {
+    if (playing() || controls() || detail() || busy() || dragging || velocity || fetchingMore() ||
+        artPending || infoPending || preloadPending || !art() || rpc.pending() || artAge < 60) return;
+    const neighbors=[page().items[index()+1],page().items[index()-1]];
+    const item=neighbors.find(item=>item && (preloadState.get(item.id)?.until ?? 0) <= frame);
+    if (!item) return;
+    const prior=preloadState.get(item.id), candidate=prior?.candidate ?? 0;
+    preloadPending=true;
+    const request=rpc.request("jellyfin.command",JSON.stringify({t:"art",id:item.id,fallback:item.artId,candidate,preload:true}),result=> {
+      preloadPending=false;
+      let next=-1;
+      if(result.ok)try { const value=JSON.parse(result.value); if(!value.cached && value.next === 1)next=1; }catch{}
+      preloadState.set(item.id,{candidate:next<0?0:next,until:frame+(next<0?1800:60)});
+      if(preloadState.size>16)preloadState.delete(preloadState.keys().next().value!);
+    });
+    if(!request)preloadPending=false;
+  }
   let artWanted = "", artAge = 0, artPending = false, artAttempted = "";
   const [metadata, setMetadata] = createSignal<Metadata>({});
   let infoWanted = "", infoAge = 0, infoPending = false, infoAttempted = "";
@@ -193,6 +213,7 @@ function App() {
       setMessage("Server URL and username are required.");
       return;
     }
+    preloadState.clear();
     command({ t: "login", server: server().trim(), username: username().trim(), password: password() },
       (hello: Hello) => {
         setPassword("");
@@ -210,6 +231,7 @@ function App() {
   }
 
   function logout() {
+    preloadState.clear();
     if (busy()) return;
     player.close();
     setPlaying(undefined);
@@ -241,6 +263,7 @@ function App() {
       history.push({ location: where(), page: page(), index: index(), scroll: scrollY() });
       load({ mode: "folder", title: item.name, parent: item.id, offset: 0 });
     } else {
+      setDetailFocus(0);
       setDetail(item);
       setControls(false);
     }
@@ -340,20 +363,33 @@ function App() {
     player.volume(volume());
   }
 
+  function moveDetail(delta: number) {
+    const choices = detail()?.resume ? [0,1,2] : [0,2];
+    const position = Math.max(0,choices.indexOf(detailFocus()));
+    setDetailFocus(choices[Math.max(0,Math.min(choices.length-1,position+delta))]);
+  }
+  function activateDetail() {
+    if (!detail() || busy()) return;
+    if (detailFocus() === 2) back();
+    else play(detail()!, detailFocus() === 1 ? 0 : detail()!.resume);
+  }
+
   onButtonPress(BTN.UP, () => {
     if (screen() === "setup") setSetupField(Math.max(0, setupField() - 1));
-    else if (!controls() && !detail()) move(-1);
+    else if (detail() && !controls()) moveDetail(-1);
+    else if (!controls()) move(-1);
   });
   onButtonPress(BTN.DOWN, () => {
     if (screen() === "setup") setSetupField(Math.min(authenticated() ? 4 : 3, setupField() + 1));
-    else if (!controls() && !detail()) move(1);
+    else if (detail() && !controls()) moveDetail(1);
+    else if (!controls()) move(1);
   });
   onButtonPress(BTN.LEFT, () => screen() === "browser" && (controls() && seek(-10)));
   onButtonPress(BTN.RIGHT, () => screen() === "browser" && (controls() && seek(10)));
   onButtonPress(BTN.CIRCLE, () => {
     if (screen() === "setup") editSetupField();
     else if (controls()) pause();
-    else if (detail()) play(detail()!, detail()!.resume);
+    else if (detail()) activateDetail();
     else if (page().items[index()]) open(page().items[index()]);
   });
   onButtonPress(BTN.CROSS, back);
@@ -490,8 +526,10 @@ function App() {
       if (request) artAttempted = wanted; else artPending = false;
     }
 
+    preloadArtwork();
     const current = rpc.session();
     if (current !== session) {
+      preloadState.clear();
       operation++; listGeneration++; setFetchingMore(false);
       infoWanted = artWanted = infoAttempted = artAttempted = ""; setArt(undefined); setMetadata({});
       setBusy(false);
@@ -603,7 +641,7 @@ function App() {
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup"}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.1</Text></View>
+        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.2</Text></View>
         <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
         </View>
@@ -646,10 +684,10 @@ function App() {
         </Show>
         <Show when={detail() && !controls()}>
           <Text class="absolute left-[10] top-[43] text-xs text-[#3c4954]">{label(detail()!.name)}</Text>
-          <View class="absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
-          <Show when={detail()!.resume > 0}><View class="absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">Start over</Text></View></Show>
+          <View class={detailFocus() === 0 ? "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
+          <Show when={detail()!.resume > 0}><View class={detailFocus() === 1 ? "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Start over</Text></View></Show>
           <Show when={!detail()!.resume}><Text class="absolute left-[12] right-[12] top-[121] text-xs text-[#6a7680]">{overview().slice(0, 145)}</Text></Show>
-          <View class="absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">{playing() ? "Back / Now playing" : "Back [B]"}</Text></View>
+          <View class={detailFocus() === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">{playing() ? "Back / Now playing" : "Back [B]"}</Text></View>
         </Show>
         <Show when={controls()}>
           <Text class="absolute left-[10] top-[40] text-xs text-[#3c4954]">{label(playing()?.name ?? "")}</Text>

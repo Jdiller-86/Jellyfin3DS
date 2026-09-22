@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.1/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.2/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -35,10 +35,10 @@ If the banner still shows an older version, use a clean reinstall to clear stale
 
 1. In FBI → Titles, select **Jellyfin3DS** (title ID `000400000FF00900`) and choose **Delete Title**. Do not select another title.
 2. Exit to HOME Menu and wait for its icon to disappear, then reboot.
-3. Open FBI and install v0.3.1 using the QR code above or the CIA download.
-4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.1**. Reboot once before testing launch.
+3. Open FBI and install v0.3.2 using the QR code above or the CIA download.
+4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.2**. Reboot once before testing launch.
 
-Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.1 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
+Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.2 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
 
 ## 2. Sign in on the 3DS
 
@@ -80,7 +80,7 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **Username or password is incorrect:** reopen Account and enter the credentials again. The password is not stored.
 
-**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Hold L while launching to force software decoding at 256×144/12 fps. New models otherwise use the repaired MVD path; the player displays MVD or CPU. Console performance remains experimental.
+**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Hold L while launching to force software decoding at 256×144/12 fps. Software is now the default; hold R while launching on New models to test experimental MVD; the player displays MVD or CPU. Console performance remains experimental.
 
 **Audio output unavailable:** dump DSP firmware with Rosalina, then restart the application.
 
@@ -88,13 +88,19 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.1` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.2` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
 
 
 ## Confirm the installed build
 
-Open Account and check **v0.3.1**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
+Open Account and check **v0.3.2**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
 
 If artwork still fails, note the message in its preview and copy `sd:/3ds/jellyfin-3ds/debug.log` immediately after reproducing it, before relaunching (the log resets at startup). The ART lines include HTTP status, transfer result and texture handle without credentials.
 
 The app banner contains no sound resource. If beeping persists with both versions verified, a short recording from selecting the icon through launch will distinguish the console sound from cached banner content.
+
+## v0.3.2 controls and cache
+
+Use D-pad Up/Down and A on the Resume / Start over / Back menu. Missing resume points skip Start over. Artwork caching is automatic, memory-only and capped at eight thumbnails (2 MiB); neighbor preloading runs while browsing is idle.
+
+MVD remains experimental after the reported system-service crash. Normal launch uses software on all models. Hold R through startup on a New model to test the aligned-input repair; L overrides R and forces software. If it still crashes, preserve the `.dmp` in `sd:/luma/dumps/arm11/` and `sd:/3ds/jellyfin-3ds/debug.log` before relaunching.
