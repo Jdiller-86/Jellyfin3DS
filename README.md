@@ -6,6 +6,14 @@ Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with
 
 **Targets original and New 3DS models.** Software playback is the default again after the reported MVD system-service crash. Hold **R while launching** on a New model to test the repaired experimental MVD path; **L** always forces software. A service abort cannot be recovered inside the app.
 
+## v0.3.3 player and artwork
+
+- Software video now packs red and blue in the GPU's RGB565 order; the inverted colors shown on the original-model screenshot should be corrected.
+- Now playing has a draggable timeline with a single seek on release, separate play/skip controls, and an accessible Stream panel. The panel shows decoded size and the requested H.264/AAC, resolution, frame-rate and bitrate caps. Standard/High changes the server's video bitrate limit while keeping the same decoder-safe dimensions and frame rate.
+- Artwork for the selected row starts sooner. The first visible library rows are preloaded one by one after the selected artwork request, then the cache follows nearby rows. Preloading pauses during playback and remains within the existing eight-image memory limit.
+
+The color correction, quality negotiation and touch seek still need a physical-console check. The Home Menu banner remains silent; the authenticated launch splash is unchanged.
+
 ## v0.3.2 cache, controls and MVD transport
 
 - Eight decoded thumbnails are retained in a **2 MiB memory LRU cache**. Nearby rows preload one at a time after the selected artwork loads, while browsing is idle. Background requests have a two-second timeout and pause during playback. The cache clears on sign-in/account expiry; it does not write images to the SD card.
@@ -16,11 +24,11 @@ Artwork errors and transfer diagnostics remain in `sd:/3ds/jellyfin-3ds/debug.lo
 
 ## Install with FBI
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.2` GitHub Release.
+On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.3` GitHub Release.
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.2/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.2" width="320"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.3/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.3" width="320"></a>
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.2/Jellyfin3DS.cia>
+Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.3/Jellyfin3DS.cia>
 
 FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
 

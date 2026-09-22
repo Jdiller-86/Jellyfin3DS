@@ -78,3 +78,22 @@ UI journey exercises neighbor preload and D-pad Back/Start over activation.
 Artwork is retained in memory only, capped at 2 MiB; preloading does not upload
 a GPU texture or replace the selected image. Real-console MVD and cache/UI
 behavior remain unverified.
+
+## v0.3.3
+
+The original-model screenshot shows red and blue swapped in software video. The
+software YUV420P converter packed RGB565 with red in the low five bits, while
+Citro3D's GPU_RGB565 expects red in the high five. A native primary-color test
+checks the conversion, and the code now uses the correct ordering. The MVD
+hardware path remains opt-in and unverified; the screenshot reports CPU decode.
+
+Player navigation adds a draggable timeline that submits one seek after finger
+release. The Stream panel distinguishes measured decoded size from requested
+resolution, frame-rate and bitrate caps. Standard/High selects bounded video
+bitrate settings without increasing decoder load. The UI journey checks a
+dragged seek, the playback actions and quality change; CI renders both screens.
+
+Artwork starts earlier on library load and sequentially warms the first visible
+rows and the selected item's neighbors into the eight-image cache. The
+first screen, slider, real Jellyfin transcoding response and color rendition
+still need a physical-console check.

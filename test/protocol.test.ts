@@ -5,7 +5,7 @@ import { PAGE_SIZE, time } from "../app/protocol.ts";
 test("the 3DS page and clock formats stay bounded", () => {
   expect(PAGE_SIZE).toBe(5);
   expect(time(0)).toBe("0:00");
-  expect(time(3723.9)).toBe("62:03");
+  expect(time(3723.9)).toBe("1:02:03");
   expect(time(-50)).toBe("0:00");
 });
 

@@ -2,6 +2,7 @@
  * FFmpeg is single-threaded here: the original console has one application CPU.
  * Jellyfin must transcode to <=256x144, 12 fps, baseline H.264, YUV420P.
  */
+#include "rgb565.h"
 _Static_assert(sizeof(enum AVColorSpace) == 4 && sizeof(enum AVCodecID) == 4,
                "FFmpeg public enum ABI must match its 32-bit enum build");
 static unsigned char clamp_color(int x) { return x < 0 ? 0 : x > 255 ? 255 : x; }
@@ -20,7 +21,7 @@ static bool software_frame(AVFrame *frame, u16 *pixels, int width, int height)
             unsigned r = clamp_color((298 * c + 409 * e + 128) >> 8);
             unsigned g = clamp_color((298 * c - 100 * d - 208 * e + 128) >> 8);
             unsigned b = clamp_color((298 * c + 516 * d + 128) >> 8);
-            pixels[y * width + x] = (r >> 3) | ((g >> 2) << 5) | ((b >> 3) << 11);
+            pixels[y * width + x] = j3ds_rgb565(r, g, b);
         }
     }
     return true;

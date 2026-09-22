@@ -13,9 +13,12 @@ import {
   type Item,
   type Metadata,
   type Page,
+  type Quality,
+  type StreamProfile,
   PAGE_SIZE,
   time,
 } from "./protocol.ts";
+import { clampPosition, progressWidth, seekAtX } from "./stream.ts";
 
 type Location = {
   mode: "libraries" | "folder" | "resume" | "search";
@@ -47,6 +50,12 @@ function App() {
   const [playing, setPlaying] = createSignal<Item>();
   const [status, setStatus] = createSignal<PlayerStatus>();
   const [controls, setControls] = createSignal(false);
+  const [streamInfo, setStreamInfo] = createSignal(false);
+  const [controlFocus, setControlFocus] = createSignal(0);
+  const [infoFocus, setInfoFocus] = createSignal(0);
+  const [seekPreview, setSeekPreview] = createSignal<number>();
+  const [quality, setQuality] = createSignal<Quality>("standard");
+  const [profile, setProfile] = createSignal<StreamProfile>();
   const [query, setQuery] = createSignal("");
   const [volume, setVolume] = createSignal(0.8);
   let history: { location: Location; page: Page; index: number; scroll: number }[] = [];
@@ -62,9 +71,12 @@ function App() {
   let preloadPending = false;
   function preloadArtwork() {
     if (playing() || controls() || detail() || busy() || dragging || velocity || fetchingMore() ||
-        artPending || infoPending || preloadPending || !art() || rpc.pending() || artAge < 60) return;
-    const neighbors=[page().items[index()+1],page().items[index()-1]];
-    const item=neighbors.find(item=>item && (preloadState.get(item.id)?.until ?? 0) <= frame);
+        artPending || infoPending || preloadPending || !artWanted || artAttempted !== artWanted ||
+        rpc.pending() || artAge < 18) return;
+    // Warm the first visible rows on initial open, then follow the selection.
+    const neighbors=[page().items[index()+1],page().items[index()+2],page().items[index()-1],
+      page().items[0],page().items[1],page().items[2]];
+    const item=neighbors.find(item=>item && item.id !== artWanted && (preloadState.get(item.id)?.until ?? 0) <= frame);
     if (!item) return;
     const prior=preloadState.get(item.id), candidate=prior?.candidate ?? 0;
     preloadPending=true;
@@ -94,7 +106,7 @@ function App() {
     scrollTarget = clampScroll(scrollTarget);
     velocity = 0;
   }
-  function nowPlaying() { if (playing()) { setDetail(undefined); setControls(true); velocity = 0; } }
+  function nowPlaying() { if (playing()) { setDetail(undefined); setControls(true); setStreamInfo(false); setControlFocus(0); velocity = 0; } }
   function prefetch() {
     if (fetchingMore() || busy() || frame < retryAfter || screen() !== "browser" || controls() || detail()) return;
     const current = page();
@@ -144,9 +156,10 @@ function App() {
     });
   }
 
-  function command(commandValue: unknown, done: (value: any) => void, foreground = true) {
+  function command(commandValue: unknown, done: (value: any) => void, foreground = true, failed?: () => void) {
     if (!rpc.connected()) {
       setMessage("Starting…");
+      failed?.();
       return;
     }
     const owner = foreground ? ++operation : operation;
@@ -159,6 +172,7 @@ function App() {
       if (foreground) setBusy(false);
       if (!result.ok) {
         setMessage(result.error);
+        failed?.();
         if (result.error.startsWith("Sign-in")) {
           setAuthenticated(false);
           setScreen("setup");
@@ -172,11 +186,13 @@ function App() {
         done(value);
       } catch {
         setMessage("Invalid server response.");
+        failed?.();
       }
     });
     if (!id) {
       if (foreground) setBusy(false);
       setMessage("Busy. Try again.");
+      failed?.();
     }
   }
 
@@ -191,6 +207,7 @@ function App() {
       resetScroll();
       setDetail(undefined);
       setControls(false);
+      setStreamInfo(false);
     });
   }
 
@@ -272,21 +289,25 @@ function App() {
   function play(item: Item, seconds: number) {
     if (busy()) return;
     player.close();
-    setPlaying(undefined);
+    setPlaying(item);
     setStatus(undefined);
-    command({ t: "play", id: item.id, seconds, duration: item.seconds }, (data) => {
+    setProfile(undefined);
+    setSeekPreview(undefined);
+    setControls(true);
+    setDetail(undefined);
+    command({ t: "play", id: item.id, seconds, duration: item.seconds, quality: quality() }, (data) => {
       setPlaying({ ...item, seconds: data.seconds });
-      setControls(true);
-      setDetail(undefined);
+      setProfile(data.profile);
       if (!player.open(data.source)) {
         setMessage("Video could not start. Check DSP firmware and server transcoding.");
         command({ t: "stop", seconds }, () => {}, false);
         setPlaying(undefined);
+        setControls(false);
         return;
       }
       player.volume(volume());
       if (plane) getOps().setImage(plane.id, player.texture());
-    });
+    }, true, () => { setPlaying(undefined); setControls(false); setProfile(undefined); });
   }
 
   function report() {
@@ -308,11 +329,14 @@ function App() {
     setPlaying(undefined);
     setStatus(undefined);
     setControls(false);
+    setStreamInfo(false);
+    setProfile(undefined);
+    setSeekPreview(undefined);
     command({ t: "stop", seconds }, () => {}, false);
   }
 
   function pause() {
-    if (!playing()) return;
+    if (!playing() || busy()) return;
     if (status()?.phase === "ended") {
       play(playing()!, 0);
       return;
@@ -322,7 +346,30 @@ function App() {
 
   function seek(delta: number) {
     const item = playing();
-    if (item) play(item, Math.max(0, (status()?.positionMs ?? 0) / 1000 + delta));
+    if (item && !busy()) seekTo((status()?.positionMs ?? 0) / 1000 + delta);
+  }
+
+  function seekTo(seconds: number) {
+    const item = playing();
+    if (!item || busy() || item.seconds <= 0) return;
+    const target = Math.min(clampPosition(seconds, item.seconds), Math.max(0, item.seconds - 1));
+    if (Math.abs(target - (status()?.positionMs ?? 0) / 1000) >= 1) play(item, target);
+  }
+
+  function switchQuality() {
+    if (busy()) return;
+    setQuality(quality() === "standard" ? "high" : "standard");
+    if (playing()) play(playing()!, (status()?.positionMs ?? 0) / 1000);
+  }
+
+  function activateControl() {
+    if (streamInfo()) {
+      if (infoFocus() === 0) switchQuality();
+      else changeVolume(0.1);
+    } else if (controlFocus() === 0) pause();
+    else if (controlFocus() === 1) { setStreamInfo(true); setInfoFocus(0); }
+    else if (controlFocus() === 2) setControls(false);
+    else stop();
   }
 
   function back() {
@@ -339,6 +386,7 @@ function App() {
       return;
     }
     if (controls()) {
+      if (streamInfo()) { setStreamInfo(false); return; }
       setControls(false);
       return;
     }
@@ -376,19 +424,21 @@ function App() {
 
   onButtonPress(BTN.UP, () => {
     if (screen() === "setup") setSetupField(Math.max(0, setupField() - 1));
+    else if (controls()) streamInfo() ? setInfoFocus(Math.max(0, infoFocus() - 1)) : setControlFocus(Math.max(0, controlFocus() - 1));
     else if (detail() && !controls()) moveDetail(-1);
     else if (!controls()) move(-1);
   });
   onButtonPress(BTN.DOWN, () => {
     if (screen() === "setup") setSetupField(Math.min(authenticated() ? 4 : 3, setupField() + 1));
+    else if (controls()) streamInfo() ? setInfoFocus(Math.min(1, infoFocus() + 1)) : setControlFocus(Math.min(3, controlFocus() + 1));
     else if (detail() && !controls()) moveDetail(1);
     else if (!controls()) move(1);
   });
-  onButtonPress(BTN.LEFT, () => screen() === "browser" && (controls() && seek(-10)));
-  onButtonPress(BTN.RIGHT, () => screen() === "browser" && (controls() && seek(10)));
+  onButtonPress(BTN.LEFT, () => screen() === "browser" && controls() && (streamInfo() ? changeVolume(-0.1) : seek(-10)));
+  onButtonPress(BTN.RIGHT, () => screen() === "browser" && controls() && (streamInfo() ? changeVolume(0.1) : seek(10)));
   onButtonPress(BTN.CIRCLE, () => {
     if (screen() === "setup") editSetupField();
-    else if (controls()) pause();
+    else if (controls()) activateControl();
     else if (detail()) activateDetail();
     else if (page().items[index()]) open(page().items[index()]);
   });
@@ -443,16 +493,19 @@ function App() {
       }
       if (!controls() && playing() && contact.y >= 192 && contact.y < 220 && contact.x >= 100) { nowPlaying(); return; }
       if (controls()) {
-        if (contact.y >= 82 && contact.y < 126) {
-          if (contact.x < 100) seek(-10);
-          else if (contact.x < 220) pause();
-          else seek(10);
-        }
-        if (contact.y >= 134 && contact.y < 174)
-          changeVolume(contact.x < 160 ? -0.1 : 0.1);
-        if (contact.y >= 180 && contact.y < 220) {
-          if (contact.x < 160) setControls(false);
-          else stop();
+        if (streamInfo()) {
+          if (contact.y >= 150 && contact.y < 186) { setInfoFocus(0); switchQuality(); }
+          else if (contact.y >= 190 && contact.y < 220) { setInfoFocus(1); changeVolume(contact.x < 160 ? -0.1 : 0.1); }
+        } else {
+          if (contact.y >= 125 && contact.y < 170) {
+            if (contact.x < 106) seek(-10);
+            else if (contact.x < 216) { setControlFocus(0); pause(); }
+            else seek(10);
+          } else if (contact.y >= 174 && contact.y < 220) {
+            if (contact.x < 109) { setControlFocus(1); setStreamInfo(true); setInfoFocus(0); }
+            else if (contact.x < 212) { setControlFocus(2); setControls(false); }
+            else { setControlFocus(3); stop(); }
+          }
         }
         return;
       }
@@ -475,6 +528,18 @@ function App() {
     },
   });
 
+  // Commit a seek once on release, so dragging never spawns multiple server transcodes.
+  createGesture({
+    surface: "auxiliary",
+    region: { rect: () => controls() && !streamInfo() ? {x:8,y:73,w:304,h:50} : null },
+    axis: "x",
+    onPanStart: contact => setSeekPreview(seekAtX(contact.x, playing()?.seconds ?? 0)),
+    onPanMove: contact => setSeekPreview(seekAtX(contact.x, playing()?.seconds ?? 0)),
+    onPanEnd: contact => { const target=seekAtX(contact.x, playing()?.seconds ?? 0); setSeekPreview(undefined); seekTo(target); },
+    onCancel: () => setSeekPreview(undefined),
+    onTap: contact => seekTo(seekAtX(contact.x, playing()?.seconds ?? 0)),
+  });
+
   onFrame(() => {
     frame++;
     if (!dragging && !controls() && !detail()) {
@@ -494,7 +559,7 @@ function App() {
     const infoKey = screen() === "browser" && !controls() ? selected()?.id ?? "" : "";
     if (infoKey !== infoWanted) { infoWanted = infoKey; infoAge = 0; infoAttempted = ""; setMetadata({}); }
     infoAge++;
-    if (infoKey && infoAge >= 18 && !dragging && !velocity && !infoPending && !busy() && !fetchingMore() && rpc.pending() === 0 && infoAttempted !== infoKey) {
+    if (infoKey && infoAge >= 8 && !dragging && !velocity && !infoPending && !busy() && !fetchingMore() && rpc.pending() === 0 && infoAttempted !== infoKey) {
       const key = infoKey; infoPending = true;
       const id = rpc.request("jellyfin.command", JSON.stringify({t:"info", id:key}), result => {
         infoPending = false;
@@ -506,7 +571,7 @@ function App() {
     const wanted = !playing() && screen() === "browser" ? selected()?.id ?? "" : "";
     if (wanted !== artWanted) { artWanted = wanted; artAge = 0; artAttempted = ""; artCandidate = 0; setArtError("Loading artwork…"); setArt(undefined); }
     artAge++;
-    if (wanted && artAge >= 30 && !artPending && !infoPending && !dragging && !velocity && !busy() && !fetchingMore() && rpc.pending() === 0 && rpc.connected() && artAttempted !== wanted) {
+    if (wanted && artAge >= 18 && !artPending && !infoPending && !dragging && !velocity && !busy() && !fetchingMore() && rpc.pending() === 0 && rpc.connected() && artAttempted !== wanted) {
       artPending = true;
       const key = wanted;
       const request = rpc.request("jellyfin.command", JSON.stringify({t:"art", id:key, candidate:artCandidate, fallback:metadata().artId ?? selected()?.artId}), result => {
@@ -538,6 +603,8 @@ function App() {
       setPlaying(undefined);
       setStatus(undefined);
       setControls(false);
+      setStreamInfo(false);
+      setProfile(undefined);
       session = current;
       if (current > 0) {
         command({ t: "hello" }, (hello: Hello) => {
@@ -584,6 +651,10 @@ function App() {
   const subtitle = () => [metadata().series, metadata().episode ? `S${metadata().season ?? 0} E${metadata().episode}` : "", selected()?.year, metadata().rating, selected()?.seconds ? `${Math.round(selected()!.seconds / 60)} min` : "", metadata().genre].filter(Boolean).join(" · ");
   const overview = () => (metadata().overview ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const label = (value: string) => value.length > 40 ? `${value.slice(0, 37)}...` : value;
+  const playbackSeconds = () => seekPreview() ?? (status()?.positionMs ?? 0) / 1000;
+  const durationSeconds = () => playing()?.seconds ?? 0;
+  const videoSize = () => (status()?.videoWidth && status()?.videoHeight)
+    ? `${status()!.videoWidth}×${status()!.videoHeight}` : "Waiting for video";
   const passwordLabel = () => password().length ? "*".repeat(Math.min(24, password().length)) : "Password";
   const videoRect = () => {
     const width = Math.max(1, status()?.videoWidth ?? 400);
@@ -641,7 +712,7 @@ function App() {
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup"}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.2</Text></View>
+        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.3</Text></View>
         <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
         </View>
@@ -690,13 +761,32 @@ function App() {
           <View class={detailFocus() === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">{playing() ? "Back / Now playing" : "Back [B]"}</Text></View>
         </Show>
         <Show when={controls()}>
-          <Text class="absolute left-[10] top-[40] text-xs text-[#3c4954]">{label(playing()?.name ?? "")}</Text>
-          <Text class="absolute left-[10] top-[61] text-xs text-[#75409b]">{time((status()?.positionMs ?? 0) / 1000)} / {time(playing()?.seconds ?? 0)} - {status()?.phase ?? "opening"} · {status()?.hardware ? "MVD" : "CPU"}</Text>
-          <View class="absolute left-[8] right-[8] top-[82] h-[44] bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">-10s</Text><Text class="text-sm text-[#3c4954]">{status()?.phase === "paused" ? "Resume" : "Pause"}</Text><Text class="text-sm text-[#3c4954]">+10s</Text></View>
-          <View class="absolute left-[8] right-[8] top-[134] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Vol -</Text><Text class="text-sm text-[#75409b]">{Math.round(volume() * 100)}%</Text><Text class="text-sm text-[#3c4954]">Vol +</Text></View>
-          <View class="absolute left-[8] right-[8] top-[180] h-[40] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-sm text-[#3c4954]">Browse</Text><Text class="text-sm text-[#3c4954]">Stop</Text></View>
+          <Show when={!streamInfo()}>
+            <Text class="absolute left-[12] top-[38] text-sm text-[#3c4954] font-bold">{label(playing()?.name ?? "")}</Text>
+            <Text class="absolute left-[12] top-[59] text-xs text-[#75409b]">{status()?.phase ?? "Opening"} · {videoSize()} · {profile()?.hardware ? "MVD" : "CPU"}</Text>
+            <Text class="absolute left-[24] top-[79] text-xs text-[#3c4954]">{time(playbackSeconds())}</Text>
+            <Text class="absolute right-[24] top-[79] text-xs text-[#3c4954]">{time(durationSeconds())}</Text>
+            <View class="absolute left-[24] top-[104] w-[272] h-[6] rounded-lg bg-[#d6dce2]" />
+            <View class="absolute left-[24] top-[104] h-[6] rounded-lg bg-[#9452b3]" style={{width:progressWidth(playbackSeconds(),durationSeconds())}} />
+            <View class="absolute top-[98] w-[17] h-[18] rounded-lg bg-white border-2 border-[#9452b3]" style={{insetL:Math.min(287,16+progressWidth(playbackSeconds(),durationSeconds()))}} />
+            <View class="absolute left-[8] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">−10s</Text></View>
+            <View class={controlFocus() === 0 ? "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954] font-bold">{status()?.phase === "paused" ? "Play" : "Pause"}</Text></View>
+            <View class="absolute left-[216] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">+10s</Text></View>
+            <View class={controlFocus() === 1 ? "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stream</Text></View>
+            <View class={controlFocus() === 2 ? "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Browse</Text></View>
+            <View class={controlFocus() === 3 ? "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stop</Text></View>
+          </Show>
+          <Show when={streamInfo()}>
+            <Text class="absolute left-[12] top-[39] text-sm text-[#3c4954] font-bold">Stream</Text>
+            <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSize()} · {profile()?.hardware ? "MVD" : "CPU"}</Text>
+            <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">Request: H.264 / AAC · MPEG-TS</Text>
+            <Text class="absolute left-[12] top-[108] text-xs text-[#3c4954]">Max {profile()?.maxWidth ?? 256}×{profile()?.maxHeight ?? 144} · {profile()?.maxFps ?? 12} fps</Text>
+            <Text class="absolute left-[12] top-[126] text-xs text-[#6a7680]">Video ≤{profile()?.videoKbps ?? 192} kb/s · Audio ≤64 kb/s</Text>
+            <View class={infoFocus() === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{quality() === "high" ? "High" : "Standard"} ›</Text></View>
+            <View class={infoFocus() === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">−</Text><Text class="text-sm text-[#75409b]">Volume {Math.round(volume()*100)}%</Text><Text class="text-sm text-[#3c4954]">+</Text></View>
+          </Show>
         </Show>
-        <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || "A: Open   X: Search")}</Text>
+        <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || (controls() ? streamInfo() ? "B: Player · Left/Right: Volume" : "B: Browse · Left/Right: Seek" : "A: Open   X: Search"))}</Text>
       </Show>
 
     </View>}</AuxiliarySurface>

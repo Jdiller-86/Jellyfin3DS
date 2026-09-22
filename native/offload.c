@@ -28,7 +28,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.2"
+#define APP_VERSION "0.3.3"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -605,6 +605,7 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   const char *id = json_string(command, "id");
   double seconds = json_number(command, "seconds", -1);
   double duration = json_number(command, "duration", 0);
+  const char *quality = json_string(command, "quality");
   if (!valid_id(id) || seconds < 0 || seconds > 2592000 ||
       duration < 0 || duration > 2592000) {
     copy_text(error, error_capacity, "Invalid playback request");
@@ -616,6 +617,11 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   snprintf(playing_session, sizeof playing_session, "j3ds%08lx",
            (unsigned long)(u32)(tick & 0xffffffffu));
   bool mvd = direct_media_has_mvd();
+  bool high = quality && strcmp(quality, "high") == 0;
+  int max_width = mvd ? 400 : 256;
+  int max_height = mvd ? 240 : 144;
+  int max_fps = mvd ? 24 : 12;
+  int video_kbps = mvd ? (high ? 700 : 472) : (high ? 320 : 192);
   char suffix[1536];
   int written = snprintf(suffix, sizeof suffix,
     "/Videos/%s/stream?UserId=%s&DeviceId=%s&MediaSourceId=%s"
@@ -625,7 +631,7 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
     "&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2"
     "&StartTimeTicks=%lld",
     id, config.user_id, config.device_id, id, playing_session,
-    mvd ? 400 : 256, mvd ? 240 : 144, mvd ? 24 : 12, mvd ? 472000 : 192000,
+    max_width, max_height, max_fps, video_kbps * 1000,
     (long long)seek_ticks);
   char url[SERVER_MAX + sizeof suffix];
   if (written <= 0 || (size_t)written >= sizeof suffix ||
@@ -646,6 +652,14 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
     "0000000000000000000000000000000000000000000000000000000000000000");
   cJSON_AddNumberToObject(reply, "seconds", duration);
   cJSON_AddNumberToObject(reply, "position", seconds);
+  cJSON *profile = cJSON_AddObjectToObject(reply, "profile");
+  cJSON_AddStringToObject(profile, "quality", high ? "high" : "standard");
+  cJSON_AddNumberToObject(profile, "videoKbps", video_kbps);
+  cJSON_AddNumberToObject(profile, "audioKbps", 64);
+  cJSON_AddNumberToObject(profile, "maxWidth", max_width);
+  cJSON_AddNumberToObject(profile, "maxHeight", max_height);
+  cJSON_AddNumberToObject(profile, "maxFps", max_fps);
+  cJSON_AddBoolToObject(profile, "hardware", mvd);
   *result = reply;
   return true;
 }
