@@ -97,3 +97,16 @@ Artwork starts earlier on library load and sequentially warms the first visible
 rows and the selected item's neighbors into the eight-image cache. The
 first screen, slider, real Jellyfin transcoding response and color rendition
 still need a physical-console check.
+
+## v0.3.4
+
+The New-model Native preset requests up to 400×240 at 30 fps for software decoding,
+or 60 fps with launch-time MVD opt-in. Original models stay within 256×144 at 12 fps.
+A native profile test covers model and decoder combinations, including an invalid
+Native request on an original 3DS. The renderer now counts a frame as presented
+only after the main thread accepts its texture; the player reports that measured
+rate and the decoded size next to the request caps. CI exercises the New-model
+quality switch in the two-screen UI journey and cross-compiles both install files.
+Performance at 400×240, the 60 fps MVD service, server output cadence and audio
+sync have not been verified on a real New 3DS. A quality request is a ceiling,
+not proof of the effective video resolution or frame rate.

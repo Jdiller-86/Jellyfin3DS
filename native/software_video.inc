@@ -1,6 +1,7 @@
 /* Original 3DS fallback. Included after the pinned player's queue/audio helpers.
  * FFmpeg is single-threaded here: the original console has one application CPU.
- * Jellyfin must transcode to <=256x144, 12 fps, baseline H.264, YUV420P.
+ * Jellyfin must transcode to <=256x144 on original models or <=400x240
+ * on New models; Native is selected explicitly in the latter case.
  */
 #include "rgb565.h"
 _Static_assert(sizeof(enum AVColorSpace) == 4 && sizeof(enum AVCodecID) == 4,
@@ -41,8 +42,11 @@ static void software_decode_thread(void)
     if (s_vp.stop_requested) return;
     if (!demux_init(&s_vp.demux)) { error = "Could not open the video stream"; goto done; }
     int width = s_vp.demux.video_width, height = s_vp.demux.video_height;
-    if (width <= 0 || height <= 0 || width > 256 || height > 144 || (width & 1)) {
-        error = "Server must transcode video to 256x144 or smaller"; goto done;
+    int max_width = direct_media_is_new_model() ? 400 : 256;
+    int max_height = direct_media_is_new_model() ? 240 : 144;
+    if (width <= 0 || height <= 0 || width > max_width || height > max_height ||
+        (width & 1) || (height & 1)) {
+        error = "Server exceeded this 3DS video size limit"; goto done;
     }
     AVFormatContext *format = s_vp.demux.fmt_ctx;
     AVStream *stream = format->streams[s_vp.demux.video_stream_idx];

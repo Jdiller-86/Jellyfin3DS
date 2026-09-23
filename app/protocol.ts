@@ -15,14 +15,17 @@ export interface Hello {
   direct: true;
   authenticated: boolean;
   persisted?: boolean;
+  newModel: boolean;
   server: string;
   username: string;
 }
 export interface DirectMediaStatus {
   videoWidth?: number;
   videoHeight?: number;
+  displayFps?: number;
+  decodeFps?: number;
 }
-export type Quality = "standard" | "high";
+export type Quality = "standard" | "high" | "native";
 export interface StreamProfile {
   quality: Quality;
   videoKbps: number;

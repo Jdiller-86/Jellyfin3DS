@@ -56,6 +56,7 @@ function App() {
   const [seekPreview, setSeekPreview] = createSignal<number>();
   const [quality, setQuality] = createSignal<Quality>("standard");
   const [profile, setProfile] = createSignal<StreamProfile>();
+  const [newModel, setNewModel] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [volume, setVolume] = createSignal(0.8);
   let history: { location: Location; page: Page; index: number; scroll: number }[] = [];
@@ -235,6 +236,7 @@ function App() {
       (hello: Hello) => {
         setPassword("");
         setAuthenticated(hello.authenticated);
+        setNewModel(hello.newModel);
         setServer(hello.server || server());
         setUsername(hello.username || username());
         if (!hello.authenticated) {
@@ -358,7 +360,7 @@ function App() {
 
   function switchQuality() {
     if (busy()) return;
-    setQuality(quality() === "standard" ? "high" : "standard");
+    setQuality(quality() === "standard" ? "high" : quality() === "high" && newModel() ? "native" : "standard");
     if (playing()) play(playing()!, (status()?.positionMs ?? 0) / 1000);
   }
 
@@ -599,6 +601,7 @@ function App() {
       infoWanted = artWanted = infoAttempted = artAttempted = ""; setArt(undefined); setMetadata({});
       setBusy(false);
       setProviderReady(current > 0);
+      setNewModel(false);
       player.close();
       setPlaying(undefined);
       setStatus(undefined);
@@ -611,6 +614,7 @@ function App() {
           setServer(hello.server || "http://");
           setUsername(hello.username || "");
           setAuthenticated(hello.authenticated);
+          setNewModel(hello.newModel);
           setPassword("");
           if (hello.authenticated) home("libraries");
           else {
@@ -712,7 +716,7 @@ function App() {
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup"}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.3</Text></View>
+        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.4</Text></View>
         <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
           <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
         </View>
@@ -778,11 +782,11 @@ function App() {
           </Show>
           <Show when={streamInfo()}>
             <Text class="absolute left-[12] top-[39] text-sm text-[#3c4954] font-bold">Stream</Text>
-            <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSize()} · {profile()?.hardware ? "MVD" : "CPU"}</Text>
-            <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">Request: H.264 / AAC · MPEG-TS</Text>
+            <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSize()} · {status()?.displayFps ? `${status()!.displayFps!.toFixed(1)} fps` : "measuring…"}</Text>
+            <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">{profile()?.hardware ? "MVD" : "CPU"} · H.264 / AAC · MPEG-TS</Text>
             <Text class="absolute left-[12] top-[108] text-xs text-[#3c4954]">Max {profile()?.maxWidth ?? 256}×{profile()?.maxHeight ?? 144} · {profile()?.maxFps ?? 12} fps</Text>
             <Text class="absolute left-[12] top-[126] text-xs text-[#6a7680]">Video ≤{profile()?.videoKbps ?? 192} kb/s · Audio ≤64 kb/s</Text>
-            <View class={infoFocus() === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{quality() === "high" ? "High" : "Standard"} ›</Text></View>
+            <View class={infoFocus() === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{quality() === "native" ? "Native" : quality() === "high" ? "High" : "Standard"} ›</Text></View>
             <View class={infoFocus() === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">−</Text><Text class="text-sm text-[#75409b]">Volume {Math.round(volume()*100)}%</Text><Text class="text-sm text-[#3c4954]">+</Text></View>
           </Show>
         </Show>

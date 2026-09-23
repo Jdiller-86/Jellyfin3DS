@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.3/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -35,10 +35,10 @@ If the banner still shows an older version, use a clean reinstall to clear stale
 
 1. In FBI → Titles, select **Jellyfin3DS** (title ID `000400000FF00900`) and choose **Delete Title**. Do not select another title.
 2. Exit to HOME Menu and wait for its icon to disappear, then reboot.
-3. Open FBI and install v0.3.3 using the QR code above or the CIA download.
-4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.3**. Reboot once before testing launch.
+3. Open FBI and install v0.3.4 using the QR code above or the CIA download.
+4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.4**. Reboot once before testing launch.
 
-Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.3 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
+Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.4 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
 
 ## 2. Sign in on the 3DS
 
@@ -88,12 +88,18 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.3` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.4` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
 
 
 ## Confirm the installed build
 
-Open Account and check **v0.3.3**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
+Open Account and check **v0.3.4**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
+
+## Native-screen video on New 3DS
+
+Open **Now playing → Stream → Quality** and select **Native**. Normal startup requests up to **400×240 at 30 fps** using software decoding; Standard and High keep the lower software limits. On New 3DS, holding **R throughout launch** enables the experimental MVD decoder and lets Native request up to **400×240 at 60 fps**. MVD may still crash the system service, so use normal startup unless testing it. Original 3DS retains the safer 256×144, 12 fps stream limits. L at startup forces software.
+
+The Stream panel shows the decoded size and actual measured presentation rate. An aspect-preserving transcode may fill less than the full 400×240 screen. A 24 fps source remains 24 fps, and requests for 30 or 60 fps can exceed what the server or decoder can deliver. Switch to Standard if Native stalls or drops frames. Changing quality restarts the stream near your current position.
 
 If artwork still fails, note the message in its preview and copy `sd:/3ds/jellyfin-3ds/debug.log` immediately after reproducing it, before relaunching (the log resets at startup). The ART lines include HTTP status, transfer result and texture handle without credentials.
 

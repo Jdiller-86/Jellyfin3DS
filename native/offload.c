@@ -6,6 +6,7 @@
 #include "direct_media.h"
 #include "artwork.h"
 #include "art_cache.h"
+#include "stream_profile.h"
 #include "util/log.h"
 #include "cJSON.h"
 
@@ -28,7 +29,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.3"
+#define APP_VERSION "0.3.4"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -349,6 +350,7 @@ static cJSON *hello_result(bool persisted) {
   cJSON_AddBoolToObject(result, "direct", true);
   cJSON_AddBoolToObject(result, "authenticated", authenticated());
   cJSON_AddBoolToObject(result, "persisted", persisted);
+  cJSON_AddBoolToObject(result, "newModel", direct_media_is_new_model());
   cJSON_AddStringToObject(result, "server", config.server);
   cJSON_AddStringToObject(result, "username", config.username);
   return result;
@@ -617,11 +619,7 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   snprintf(playing_session, sizeof playing_session, "j3ds%08lx",
            (unsigned long)(u32)(tick & 0xffffffffu));
   bool mvd = direct_media_has_mvd();
-  bool high = quality && strcmp(quality, "high") == 0;
-  int max_width = mvd ? 400 : 256;
-  int max_height = mvd ? 240 : 144;
-  int max_fps = mvd ? 24 : 12;
-  int video_kbps = mvd ? (high ? 700 : 472) : (high ? 320 : 192);
+  J3DSStreamProfile stream = j3ds_stream_profile(direct_media_is_new_model(), mvd, quality);
   char suffix[1536];
   int written = snprintf(suffix, sizeof suffix,
     "/Videos/%s/stream?UserId=%s&DeviceId=%s&MediaSourceId=%s"
@@ -631,7 +629,7 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
     "&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2"
     "&StartTimeTicks=%lld",
     id, config.user_id, config.device_id, id, playing_session,
-    max_width, max_height, max_fps, video_kbps * 1000,
+    stream.width, stream.height, stream.fps, stream.video_kbps * 1000,
     (long long)seek_ticks);
   char url[SERVER_MAX + sizeof suffix];
   if (written <= 0 || (size_t)written >= sizeof suffix ||
@@ -653,12 +651,12 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
   cJSON_AddNumberToObject(reply, "seconds", duration);
   cJSON_AddNumberToObject(reply, "position", seconds);
   cJSON *profile = cJSON_AddObjectToObject(reply, "profile");
-  cJSON_AddStringToObject(profile, "quality", high ? "high" : "standard");
-  cJSON_AddNumberToObject(profile, "videoKbps", video_kbps);
+  cJSON_AddStringToObject(profile, "quality", stream.quality);
+  cJSON_AddNumberToObject(profile, "videoKbps", stream.video_kbps);
   cJSON_AddNumberToObject(profile, "audioKbps", 64);
-  cJSON_AddNumberToObject(profile, "maxWidth", max_width);
-  cJSON_AddNumberToObject(profile, "maxHeight", max_height);
-  cJSON_AddNumberToObject(profile, "maxFps", max_fps);
+  cJSON_AddNumberToObject(profile, "maxWidth", stream.width);
+  cJSON_AddNumberToObject(profile, "maxHeight", stream.height);
+  cJSON_AddNumberToObject(profile, "maxFps", stream.fps);
   cJSON_AddBoolToObject(profile, "hardware", mvd);
   *result = reply;
   return true;

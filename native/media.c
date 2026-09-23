@@ -39,6 +39,8 @@ static bool has_frame;
 static bool desired_paused;
 static bool hardware_supported;
 bool direct_media_has_mvd(void) { return hardware_supported; }
+static bool new_model_supported;
+bool direct_media_is_new_model(void) { return new_model_supported; }
 static float desired_volume = 0.8f;
 static int32_t texture_handle = -1;
 static unsigned generation;
@@ -192,7 +194,8 @@ bool media_start(void) {
   video_player_init();
   /* Never probe the New-only MVD service on original models. */
   bool new_model = false;
-  hardware_supported = R_SUCCEEDED(APT_CheckNew3DS(&new_model)) && new_model;
+  new_model_supported = R_SUCCEEDED(APT_CheckNew3DS(&new_model)) && new_model;
+  hardware_supported = new_model_supported;
   /* A system-service abort cannot be caught by the app. Require explicit
    * opt-in until the repaired transport is verified on hardware. */
   hidScanInput();
@@ -220,6 +223,8 @@ void media_stop(void) {
   direct_media_forget_prepared();
   started = false;
   ndsp_ready = false;
+  new_model_supported = false;
+  hardware_supported = false;
   requested_open = false;
   open_pending = false;
   close_pending = false;
@@ -390,13 +395,16 @@ void media_snapshot(char *out, size_t capacity) {
     ? (unsigned)(status.position_ticks / 10000) : 0;
   unsigned duration = status.duration_ticks > 0
     ? (unsigned)(status.duration_ticks / 10000) : 0;
+  double decode_fps = isfinite(status.decode_fps) && status.decode_fps > 0 ? status.decode_fps : 0;
+  double display_fps = isfinite(status.display_fps) && status.display_fps > 0 ? status.display_fps : 0;
   snprintf(out, capacity,
     "{\"phase\":\"%s\",\"positionMs\":%u,\"durationMs\":%u,"
     "\"bufferedMs\":0,\"decodedFrames\":%u,\"presentedFrames\":%u,"
     "\"droppedFrames\":0,\"receivedBytes\":0,\"decodeMaxUs\":0,"
     "\"audioUnderruns\":0,\"hardware\":%s,\"videoWidth\":%d,"
-    "\"videoHeight\":%d,\"error\":\"%s\"}",
+    "\"videoHeight\":%d,\"decodeFps\":%.1f,\"displayFps\":%.1f,"
+    "\"error\":\"%s\"}",
     phase, position, duration, has_frame ? 1u : 0u, has_frame ? 1u : 0u,
     hardware_supported ? "true" : "false",
-    status.video_width, status.video_height, error);
+    status.video_width, status.video_height, decode_fps, display_fps, error);
 }

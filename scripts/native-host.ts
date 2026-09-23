@@ -58,6 +58,10 @@ export function transformVideoHeader(source: string): string {
 }
 
 export function transformVideoSource(source: string): string {
+  source = replaceOne(source,
+    "            s_vp.new_tex_ready = true;\n            s_vp.frames_displayed++;",
+    "            s_vp.new_tex_ready = true;",
+    "count video frames when accepted by the renderer");
   source = replaceOne(source, "        /* Wait for a frame in the queue */",
     "        /* Do not recycle the displayed texture until the main thread has\n         * retired the GPU list and accepted the pending frame. */\n        LightLock_Lock(&s_vp.tex_lock);\n        bool pending = s_vp.new_tex_ready;\n        LightLock_Unlock(&s_vp.tex_lock);\n        if (pending) { svcSleepThread(2000000LL); continue; }\n        /* Wait for a frame in the queue */", "GPU frame handoff");
   source = replaceOne(source, "    queued_frame_t frames[FRAME_QUEUE_SIZE];",
@@ -135,7 +139,7 @@ export function transformVideoSource(source: string): string {
     `                /* ${MARKER}: PocketJS samples v=0 from the high texture rows. */\n                int dst_row = 0, y_count = 0;\n                int padding = s_vp.frame_tex[write_idx].height - f->height;\n                for (int y = 0; y < padding; y++)\n                    dst_row += s_inc_y[y_count++];\n                for (int y = 0; y < f->height; y++) {\n                    const u8 *row = f->data + (f->height - 1 - y) * f->width * 2;\n                    tile_row_morton(tex_data, dst_row, row, f->width);\n                    dst_row += s_inc_y[y_count++];\n                }`,
     "video orientation",
   );
-  return `${source}\n\n/* ${MARKER}: PocketJS binds this texture in its own PICA draw list. */\nstatic bool at_frame_boundary;\nvoid video_player_present(void) {\n    at_frame_boundary = true;\n    video_player_texture(NULL, NULL);\n    at_frame_boundary = false;\n}\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale)\n{\n    if (s_vp.state != VIDEO_PLAYING && s_vp.state != VIDEO_PAUSED) return NULL;\n    if (!s_vp.tex_initialized && s_vp.display_width > 0)\n        init_frame_texture(s_vp.display_width, s_vp.display_height);\n    LightLock_Lock(&s_vp.tex_lock);\n    if (at_frame_boundary && s_vp.new_tex_ready) {\n        s_vp.frame_img.tex = &s_vp.frame_tex[s_vp.tex_display_idx];\n        s_vp.frame_img.subtex = &s_subtex;\n        s_vp.new_tex_ready = false;\n    }\n    C3D_Tex *texture = s_vp.tex_initialized ? s_vp.frame_img.tex : NULL;\n    if (texture) {\n        if (u_scale) *u_scale = (float)s_vp.display_width / (float)texture->width;\n        if (v_scale) *v_scale = (float)s_vp.display_height / (float)texture->height;\n    }\n    LightLock_Unlock(&s_vp.tex_lock);\n    return texture;\n}\n`;
+  return `${source}\n\n/* ${MARKER}: PocketJS binds this texture in its own PICA draw list. */\nstatic bool at_frame_boundary;\nvoid video_player_present(void) {\n    at_frame_boundary = true;\n    video_player_texture(NULL, NULL);\n    at_frame_boundary = false;\n}\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale)\n{\n    if (s_vp.state != VIDEO_PLAYING && s_vp.state != VIDEO_PAUSED) return NULL;\n    if (!s_vp.tex_initialized && s_vp.display_width > 0)\n        init_frame_texture(s_vp.display_width, s_vp.display_height);\n    LightLock_Lock(&s_vp.tex_lock);\n    if (at_frame_boundary && s_vp.new_tex_ready) {\n        s_vp.frame_img.tex = &s_vp.frame_tex[s_vp.tex_display_idx];\n        s_vp.frame_img.subtex = &s_subtex;\n        s_vp.new_tex_ready = false;\n        s_vp.frames_displayed++;\n    }\n    C3D_Tex *texture = s_vp.tex_initialized ? s_vp.frame_img.tex : NULL;\n    if (texture) {\n        if (u_scale) *u_scale = (float)s_vp.display_width / (float)texture->width;\n        if (v_scale) *v_scale = (float)s_vp.display_height / (float)texture->height;\n    }\n    LightLock_Unlock(&s_vp.tex_lock);\n    return texture;\n}\n`;
 }
 
 export function transformMakefile(source: string): string {
@@ -143,7 +147,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.3\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.4\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -161,7 +165,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(ELF):",
-    `$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(BUILD)/media.o: /out/native/media.c /out/native/direct_media.h $(SOURCE)/media.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/offload.o: /out/native/offload.c /out/native/artwork.h /out/native/art_cache.h /out/native/direct_media.h $(SOURCE)/offload.h $(SOURCE)/offload_queue.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/video_player.o: /out/.pocket/native/generated/video_player.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/mvd_decode.o: /out/native/mvd_decode.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/ffmpeg_demux.o: /out/vendor/jellyfin-3ds/src/video/ffmpeg_demux.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/fake_pthread.o: /out/vendor/jellyfin-3ds/src/video/fake_pthread.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/cJSON.o: /out/vendor/jellyfin-3ds/src/api/cJSON.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/log.o: /out/vendor/jellyfin-3ds/src/util/log.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n\n$(ELF):`,
+    `$(BUILD)/main.o $(BUILD)/qjs.o $(BUILD)/gfx.o: $(SOURCE)/media.h\n\n$(BUILD)/media.o: /out/native/media.c /out/native/direct_media.h $(SOURCE)/media.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/offload.o: /out/native/offload.c /out/native/artwork.h /out/native/art_cache.h /out/native/stream_profile.h /out/native/direct_media.h $(SOURCE)/offload.h $(SOURCE)/offload_queue.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/video_player.o: /out/.pocket/native/generated/video_player.c /out/native/software_video.inc /out/native/rgb565.h /out/native/direct_media.h $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/mvd_decode.o: /out/native/mvd_decode.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/ffmpeg_demux.o: /out/vendor/jellyfin-3ds/src/video/ffmpeg_demux.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/fake_pthread.o: /out/vendor/jellyfin-3ds/src/video/fake_pthread.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/cJSON.o: /out/vendor/jellyfin-3ds/src/api/cJSON.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n$(BUILD)/log.o: /out/vendor/jellyfin-3ds/src/util/log.c $(FLAGS_STAMP) | $(BUILD)\n\t$(CC) $(CFLAGS) -c $< -o $@\n\n$(ELF):`,
     "native compile rules",
   );
   source = replaceOne(
@@ -186,14 +190,14 @@ export function transformMakefile(source: string): string {
   source = source.replace("$(RSF) $(CIA_STAMP)\n", "$(RSF) $(CIA_STAMP) /out/.pocket/banner/banner.bnr\n");
   // Update both the metadata recipe and its cache stamp.
   if(source.split('"$$POCKETJS_SMDH_DESC"').length !== 3) throw new Error("SMDH description seam changed");
-  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.3"');
+  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.4"');
   // FFmpeg is built with 32-bit enums. Its public structs must use the same ABI.
   source += "\n$(BUILD)/video_player.o $(BUILD)/ffmpeg_demux.o: CFLAGS += -fno-short-enums\n";
   return source;
 }
 
 export function transformRsf(source: string): string {
-  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 11", "CIA revision");
+  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 12", "CIA revision");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  # APT captures framebuffers on the CPU before opening the OS keyboard.\n  MemoryMapping:\n   - 1f000000-1f5fffff:r\n  InterruptNumbers:", "DSP RAM mapping");
 }

@@ -7,7 +7,7 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  const wasm=await createWasmUi(await Bun.file("vendor/pocketjs/hosts/web/pocketjs.wasm").arrayBuffer(),{width:400,height:240});wasm.createAuxiliarySurface(320,240);
  const g=globalThis as any,replies:string[]=[],commands:any[]=[];
  let keyboardAccept=true;
- let session=1,signedIn=false,opened=0,position=0,phase="idle";
+ let session=1,signedIn=false,opened=0,position=0,phase="idle",currentQuality="standard";
  const rows=Array.from({length:50},(_,i)=>({id:`a${i}`,name:["Big Buck Bunny","Sintel","Tears of Steel","Cosmos - The shore of the cosmic ocean","Planet Earth - From pole to pole"][i%5],type:"Movie",folder:false,seconds:600,resume:12,played:false,year:2024}));
  const texture=wasm.ops.uploadTexture(new Uint8Array(512*256*4).fill(100),512,256,3);
  const pixels=new Uint8Array(256*256*4);
@@ -16,9 +16,9 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  g.ui=wasm.ops;g.__pak=await Bun.file("vendor/pocketjs/dist/3ds/guest/jellyfin3ds.pak").arrayBuffer();
  g.offload={session:()=>session,take:()=>replies.shift(),submit:(raw:string)=>{const r=JSON.parse(raw),c=JSON.parse(r.payload);commands.push(c);let value:any={};
  if(c.t==="keyboard")value={accepted:keyboardAccept,value:c.field==="search"?"Cosmos":c.field==="server"?"http://new-server:8096":c.value};
- if(c.t==="info")value={overview:"A young rabbit leaves his home and explores a colorful world.",rating:"PG",genre:"Animation"};if(c.t==="art")value=c.preload?{cached:true}:c.candidate===0?{handle:-1,next:1,error:"Artwork unavailable"}:{handle:artTexture,width:256,height:256};if(c.t==="hello")value={direct:true,authenticated:signedIn,server:"http://jellyfin.local:8096",username:"Mii"};if(c.t==="list")value={items:rows.slice(c.offset,c.offset+5),total:50,offset:c.offset};if(c.t==="play"){position=c.seconds;value={source:{host:"127.0.0.1",port:1,token:"0".repeat(64)},seconds:600,position,profile:{quality:c.quality,videoKbps:c.quality==="high"?320:192,audioKbps:64,maxWidth:256,maxHeight:144,maxFps:12,hardware:false}};}
+ if(c.t==="info")value={overview:"A young rabbit leaves his home and explores a colorful world.",rating:"PG",genre:"Animation"};if(c.t==="art")value=c.preload?{cached:true}:c.candidate===0?{handle:-1,next:1,error:"Artwork unavailable"}:{handle:artTexture,width:256,height:256};if(c.t==="hello")value={direct:true,authenticated:signedIn,server:"http://jellyfin.local:8096",username:"Mii",newModel:true};if(c.t==="list")value={items:rows.slice(c.offset,c.offset+5),total:50,offset:c.offset};if(c.t==="play"){position=c.seconds;currentQuality=c.quality;value={source:{host:"127.0.0.1",port:1,token:"0".repeat(64)},seconds:600,position,profile:{quality:c.quality,videoKbps:c.quality==="native"?850:c.quality==="high"?320:192,audioKbps:64,maxWidth:c.quality==="native"?400:256,maxHeight:c.quality==="native"?240:144,maxFps:c.quality==="native"?30:12,hardware:false}};}
  replies.push(JSON.stringify({id:r.id,payload:JSON.stringify(value)}));return true;}};
- g.media={open:()=>{opened++;phase="playing";return true;},close:()=>{phase="idle";},paused:(v:boolean)=>phase=v?"paused":"playing",volume:()=>{},texture:()=>texture,status:()=>JSON.stringify({phase,positionMs:position*1000,bufferedMs:1000,decodedFrames:opened?1:0,presentedFrames:phase!=="idle"?1:0,droppedFrames:0,receivedBytes:0,decodeMaxUs:0,audioUnderruns:0,hardware:false,videoWidth:256,videoHeight:144,error:""})};
+ g.media={open:()=>{opened++;phase="playing";return true;},close:()=>{phase="idle";},paused:(v:boolean)=>phase=v?"paused":"playing",volume:()=>{},texture:()=>texture,status:()=>JSON.stringify({phase,positionMs:position*1000,bufferedMs:1000,decodedFrames:opened?1:0,presentedFrames:phase!=="idle"?1:0,droppedFrames:0,receivedBytes:0,decodeMaxUs:0,audioUnderruns:0,hardware:false,videoWidth:currentQuality==="native"?400:256,videoHeight:currentQuality==="native"?240:144,displayFps:currentQuality==="native"?29.7:11.8,error:""})};
  (0,eval)(await Bun.file("vendor/pocketjs/dist/3ds/guest/jellyfin3ds.js").text());
  const step=(n=12,x?:number,y?:number,buttons=0)=>{for(let i=0;i<n;i++){g.frame(buttons,undefined,x===undefined?[]:[__packTouch(1,x,y!)],x===undefined?[]:[wasm.ops.hitTestBoundsAuxiliary!(x,y!)],x===undefined?[]:[1]);wasm.tick();}};
  const tap=(x:number,y:number)=>{step(3,x,y);step();};const press=(b:number)=>{step(1,undefined,undefined,b);step();};
@@ -51,10 +51,10 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  press(0x200);expect(opened).toBe(3);expect(position).toBe(310);
  tap(56,195);await capture("stream-info");
  tap(266,164);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("high");expect(opened).toBe(4);
- await capture("stream-high");press(0x4000);
+ await capture("stream-high");tap(266,164);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("native");expect(commands.filter(c=>c.t==="play").at(-1).seconds).toBe(310);expect(opened).toBe(5);await capture("stream-native");press(0x4000);
  press(0x4000);await capture("playing-browse");
  tap(225,205);press(0x2000);expect(phase).toBe("paused");press(0x2000);expect(phase).toBe("playing");
- expect(opened).toBe(4);press(0x4000); // Back to browsing without reopening playback.
+ expect(opened).toBe(5);press(0x4000); // Back to browsing without reopening playback.
  press(0x1000);expect(commands.filter(c=>c.t==="keyboard").at(-1).field).toBe("search"); // OS cancellation is mocked.
  keyboardAccept=true;press(0x1000);expect(commands.filter(c=>c.t==="list").at(-1).query).toBe("Cosmos");
  session=0;step();expect(phase).toBe("idle");session=3;step(30);expect(commands.filter(c=>c.t==="hello")).toHaveLength(3);
