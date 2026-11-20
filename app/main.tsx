@@ -20,6 +20,14 @@ import {
 } from "./protocol.ts";
 import { clampPosition, seekAtX } from "./stream.ts";
 import {
+  ROW_HEIGHT,
+  clampScroll as clampListScroll,
+  hitTestControls,
+  hitTestDetail,
+  hitTestNav,
+  hitTestSetup,
+} from "./ui.ts";
+import {
   BrowserListView,
   DetailView,
   NavBar,
@@ -104,9 +112,9 @@ function App() {
   const [scrollY, setScrollY] = createSignal(0);
   const [fetchingMore, setFetchingMore] = createSignal(false);
   let scrollTarget = 0, velocity = 0, dragging = false, listGeneration = 0, retryAfter = 0;
-  const rowHeight = 28, listHeight = 140;
+  const rowHeight = ROW_HEIGHT, listHeight = 140;
   const maxScroll = () => Math.max(0, page().items.length * rowHeight - listHeight);
-  const clampScroll = (value: number) => Math.max(0, Math.min(maxScroll(), value));
+  const clampScroll = (value: number) => clampListScroll(value, page().items.length);
   function resetScroll(value = 0) { velocity = 0; dragging = false; scrollTarget = clampScroll(value); setScrollY(scrollTarget); }
   function focusRow(row: number) {
     setIndex(row);
@@ -345,10 +353,20 @@ function App() {
     command({ t: "stop", seconds }, () => {}, false);
   }
 
+  function nextItem(): Item | undefined {
+    const current = playing();
+    if (!current) return undefined;
+    const items = page().items;
+    const at = items.findIndex(item => item.id === current.id);
+    if (at < 0) return undefined;
+    const next = items[at + 1];
+    return next && !next.folder ? next : undefined;
+  }
+
   function pause() {
     if (!playing() || busy()) return;
     if (status()?.phase === "ended") {
-      play(playing()!, 0);
+      play(nextItem() ?? playing()!, 0);
       return;
     }
     player.pause(status()?.phase !== "paused");
@@ -481,13 +499,7 @@ function App() {
       if (busy()) return;
       velocity = 0; scrollTarget = scrollY();
       if (screen() === "setup") {
-        let chosen = -1;
-        if (contact.y >= 43 && contact.y < 82) chosen = 0;
-        else if (contact.y >= 86 && contact.y < 125) chosen = 1;
-        else if (contact.y >= 129 && contact.y < 168) chosen = 2;
-        else if (contact.y >= 176 && contact.y < 216) {
-          chosen = authenticated() && contact.x >= 160 ? 4 : 3;
-        }
+        const chosen = hitTestSetup(contact.x, contact.y, authenticated());
         if (chosen >= 0) {
           setSetupField(chosen);
           editSetupField();
@@ -495,34 +507,33 @@ function App() {
         return;
       }
       if (contact.y < 32) {
-        if (contact.x < 80) home("libraries");
-        else if (contact.x < 160) home("resume");
-        else if (contact.x < 240) editField("search");
+        const target = hitTestNav(contact.x);
+        if (target === "libraries") home("libraries");
+        else if (target === "resume") home("resume");
+        else if (target === "search") editField("search");
         else showSetup();
         return;
       }
       if (!controls() && playing() && contact.y >= 192 && contact.y < 220 && contact.x >= 100) { nowPlaying(); return; }
       if (controls()) {
-        if (streamInfo()) {
-          if (contact.y >= 150 && contact.y < 186) { setInfoFocus(0); switchQuality(); }
-          else if (contact.y >= 190 && contact.y < 220) { setInfoFocus(1); changeVolume(contact.x < 160 ? -0.1 : 0.1); }
-        } else {
-          if (contact.y >= 125 && contact.y < 170) {
-            if (contact.x < 106) seek(-10);
-            else if (contact.x < 216) { setControlFocus(0); pause(); }
-            else seek(10);
-          } else if (contact.y >= 174 && contact.y < 220) {
-            if (contact.x < 109) { setControlFocus(1); setStreamInfo(true); setInfoFocus(0); }
-            else if (contact.x < 212) { setControlFocus(2); setControls(false); }
-            else { setControlFocus(3); stop(); }
-          }
-        }
+        const action = hitTestControls(contact.x, contact.y, streamInfo());
+        if (action === "quality") { setInfoFocus(0); switchQuality(); }
+        else if (action === "volDown") { setInfoFocus(1); changeVolume(-0.1); }
+        else if (action === "volUp") { setInfoFocus(1); changeVolume(0.1); }
+        else if (action === "seekBack") seek(-10);
+        else if (action === "pause") { setControlFocus(0); pause(); }
+        else if (action === "seekFwd") seek(10);
+        else if (action === "stream") { setControlFocus(1); setStreamInfo(true); setInfoFocus(0); }
+        else if (action === "browse") { setControlFocus(2); setControls(false); }
+        else if (action === "stop") { setControlFocus(3); stop(); }
         return;
       }
       if (detail()) {
-        if (contact.y >= 76 && contact.y < 116) play(detail()!, detail()!.resume);
-        else if (contact.y >= 122 && contact.y < 162 && detail()!.resume > 0) play(detail()!, 0);
-        else if (contact.y >= 170 && contact.y < 213) { if (playing() && contact.x >= 160) nowPlaying(); else back(); }
+        const action = hitTestDetail(contact.x, contact.y, detail()!.resume > 0, Boolean(playing()));
+        if (action === "resume") play(detail()!, detail()!.resume);
+        else if (action === "restart") play(detail()!, 0);
+        else if (action === "nowPlaying") nowPlaying();
+        else if (action === "back") back();
         return;
       }
       if (contact.y >= 48 && contact.y < 188) {
@@ -696,14 +707,16 @@ function App() {
       </View>
       <Show when={!playing() && screen() === "browser"}>
         <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
-          <View class="absolute left-[60] top-[4] w-[256] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center" style={{height:detail()?100:144}}>
-            <Text class="text-sm text-[#8c9ba6]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
+          <View class="absolute left-[10] top-[10] w-[178] h-[100] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center">
+            <Text class="text-xs text-[#8c9ba6]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
             <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
-              class="absolute top-0" style={{insetL:detail()?39:0,width:detail()?178:256,height:detail()?178:256,opacity:art()?1:0}} />
+              class="absolute top-0" style={{insetL:0,width:178,height:178,opacity:art()?1:0}} />
           </View>
-          <Text class="absolute left-[12] text-sm text-[#3c4954] font-bold" style={{insetT:detail()?111:151}}>{label(selected()?.name ?? "Library")}</Text>
-          <Text class="absolute left-[12] text-xs text-[#75409b]" style={{insetT:detail()?135:174}}>{subtitle().slice(0, 56)}</Text>
-          <Text class="absolute left-[12] right-[12] text-xs text-[#6a7680]" style={{insetT:detail()?154:192}}>{overview().length > (detail()?165:54) ? overview().slice(0, detail()?162:51) + "..." : overview()}</Text>
+          <Text class="absolute left-[198] right-[10] top-[12] text-sm text-[#3c4954] font-bold">{label(selected()?.name ?? "Library")}</Text>
+          <Text class="absolute left-[198] right-[10] top-[52] text-xs text-[#75409b]">{subtitle().slice(0, 60)}</Text>
+          <Text class="absolute left-[198] right-[10] top-[88] text-xs text-[#8c9ba6]">{selected()?.played ? "Watched" : selected()?.resume ? `Resume ${time(selected()!.resume)}` : selected()?.type ?? ""}</Text>
+          <View class="absolute left-[10] right-[10] top-[118] h-[1] bg-[#edf3f6]" />
+          <Text class="absolute left-[10] right-[10] top-[125] text-xs text-[#6a7680]">{overview().length > 210 ? overview().slice(0, 207) + "..." : overview()}</Text>
         </View>
       </Show>
       <Show when={screen() === "boot"}>
@@ -740,7 +753,7 @@ function App() {
         <NavBar mode={where().mode} />
         <Show when={!controls() && !detail()}>
           <BrowserListView
-            title={where().title}
+            title={history.length ? `${history[history.length - 1].location.title} › ${where().title}` : where().title}
             page={page()}
             index={index()}
             scrollY={scrollY()}
@@ -774,6 +787,7 @@ function App() {
             infoFocus={infoFocus()}
             quality={quality()}
             volume={volume()}
+            hasNext={Boolean(nextItem())}
           />
         </Show>
         <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || (controls() ? streamInfo() ? "B: Player · Left/Right: Volume" : "B: Browse · Left/Right: Seek" : "A: Open   X: Search"))}</Text>

@@ -22,6 +22,11 @@ export function SetupView(props: {
       </View>
       <View class={props.setupField === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
         <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text>
+        <Show when={props.server.startsWith("https://") || props.server.startsWith("http://")}>
+          <Text class={props.server.startsWith("https://") ? "absolute right-[8] top-[4] text-xs text-[#2e7d32] font-bold" : "absolute right-[8] top-[4] text-xs text-[#9a6700]"}>
+            {props.server.startsWith("https://") ? "HTTPS" : "HTTP"}
+          </Text>
+        </Show>
         <Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(props.server)}</Text>
       </View>
       <View class={props.setupField === 1 ? "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
@@ -112,6 +117,9 @@ export function BrowserListView(props: {
       </Show>
       <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg">
         <Text class="text-xs text-[#3c4954]">Back [B]</Text>
+        <Show when={props.playing}>
+          <View class="w-[1] h-[16] bg-[#c4cbd1]" />
+        </Show>
         <Text class="text-xs text-[#75409b]">{props.playing ? "Now playing [SELECT]" : `${props.page.total} items`}</Text>
       </View>
     </>
@@ -138,9 +146,19 @@ export function DetailView(props: {
       <Show when={!props.item.resume}>
         <Text class="absolute left-[12] right-[12] top-[121] text-xs text-[#6a7680]">{props.overview.slice(0, 145)}</Text>
       </Show>
-      <View class={props.detailFocus === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-        <Text class="text-sm text-[#3c4954]">{props.playing ? "Back / Now playing" : "Back [B]"}</Text>
-      </View>
+      <Show when={!props.playing}>
+        <View class={props.detailFocus === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
+          <Text class="text-sm text-[#3c4954]">Back [B]</Text>
+        </View>
+      </Show>
+      <Show when={props.playing}>
+        <View class={props.detailFocus === 2 ? "absolute left-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
+          <Text class="text-sm text-[#3c4954]">Back [B]</Text>
+        </View>
+        <View class="absolute right-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border border-[#9452b3] rounded-lg">
+          <Text class="text-sm text-[#75409b] font-bold">Now playing</Text>
+        </View>
+      </Show>
     </>
   );
 }
@@ -158,7 +176,9 @@ export function PlayerControlsView(props: {
   infoFocus: number;
   quality: Quality;
   volume: number;
+  hasNext?: boolean;
 }) {
+  const primaryLabel = () => props.phase === "ended" ? (props.hasNext ? "Next" : "Replay") : props.phase === "paused" ? "Play" : "Pause";
   return (
     <>
       <Show when={!props.streamInfo}>
@@ -170,7 +190,7 @@ export function PlayerControlsView(props: {
         <View class="absolute left-[24] top-[104] h-[6] rounded-lg bg-[#9452b3]" style={{ width: progressWidth(props.playbackSeconds, props.durationSeconds) }} />
         <View class="absolute top-[98] w-[17] h-[18] rounded-lg bg-white border-2 border-[#9452b3]" style={{ insetL: Math.min(287, 16 + progressWidth(props.playbackSeconds, props.durationSeconds)) }} />
         <View class="absolute left-[8] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">−10s</Text></View>
-        <View class={props.controlFocus === 0 ? "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954] font-bold">{props.phase === "paused" ? "Play" : "Pause"}</Text></View>
+        <View class={props.controlFocus === 0 ? "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954] font-bold">{primaryLabel()}</Text></View>
         <View class="absolute left-[216] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">+10s</Text></View>
         <View class={props.controlFocus === 1 ? "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stream</Text></View>
         <View class={props.controlFocus === 2 ? "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Browse</Text></View>
@@ -178,13 +198,22 @@ export function PlayerControlsView(props: {
       </Show>
       <Show when={props.streamInfo}>
         <Text class="absolute left-[12] top-[39] text-sm text-[#3c4954] font-bold">Stream</Text>
-        <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {props.videoSize} · {props.displayFps ? `${props.displayFps.toFixed(1)} fps` : "measuring…"}</Text>
+        <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSizeText(props.videoSize)} · {props.displayFps ? `${props.displayFps.toFixed(1)} fps` : "measuring…"}</Text>
         <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">{props.profile?.hardware ? "MVD" : "CPU"} · H.264 / AAC · MPEG-TS</Text>
         <Text class="absolute left-[12] top-[108] text-xs text-[#3c4954]">Max {props.profile?.maxWidth ?? 256}×{props.profile?.maxHeight ?? 144} · {props.profile?.maxFps ?? 12} fps</Text>
         <Text class="absolute left-[12] top-[126] text-xs text-[#6a7680]">Video ≤{props.profile?.videoKbps ?? 192} kb/s · Audio ≤64 kb/s</Text>
         <View class={props.infoFocus === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{props.quality === "native" ? "Native" : props.quality === "high" ? "High" : "Standard"} ›</Text></View>
-        <View class={props.infoFocus === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">−</Text><Text class="text-sm text-[#75409b]">Volume {Math.round(props.volume * 100)}%</Text><Text class="text-sm text-[#3c4954]">+</Text></View>
+        <View class={props.infoFocus === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg overflow-hidden" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg overflow-hidden"}>
+          <Text class="text-sm text-[#3c4954]">−</Text>
+          <Text class="text-sm text-[#75409b]">Volume {Math.round(props.volume * 100)}%</Text>
+          <Text class="text-sm text-[#3c4954]">+</Text>
+          <View class="absolute left-[6] bottom-0 h-[2] bg-[#aa5cc3]" style={{ width: Math.round(292 * props.volume) }} />
+        </View>
       </Show>
     </>
   );
+}
+
+function videoSizeText(size: string) {
+  return size;
 }
