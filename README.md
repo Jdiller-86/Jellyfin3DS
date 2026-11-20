@@ -1,84 +1,118 @@
 # Jellyfin3DS
 
-Jellyfin3DS is an unofficial, direct Jellyfin client for Nintendo 3DS built with [PocketJS](https://github.com/pocket-stack/pocketjs). It browses libraries, seasons, and episodes; searches; resumes videos; and reports playback progress. The 400×240 upper screen carries video and context while the 320×240 touch screen carries navigation and controls in a theme with Jellyfin-purple accents and native 3DS-style panels.
+[![Build 3DS homebrew](https://github.com/Jdiller-86/Jellyfin3DS/actions/workflows/build.yml/badge.svg)](https://github.com/Jdiller-86/Jellyfin3DS/actions/workflows/build.yml)
+[![Release v0.3.4](https://img.shields.io/github/v/release/Jdiller-86/Jellyfin3DS?include_prereleases&label=release)](https://github.com/Jdiller-86/Jellyfin3DS/releases/tag/v0.3.4)
+[![Target](https://img.shields.io/badge/target-Nintendo%203DS%20%2F%20New%203DS-ce181e)](INSTALL.md)
+[![License](https://img.shields.io/badge/license-MIT%20%2F%20GPL--3.0-blue)](LICENSE.md)
 
-**No companion computer, phone, proxy, or Jellyfin plugin is needed after installation.** The 3DS connects to the Jellyfin server itself. The on-device implementation uses libcurl for the Jellyfin API, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes it with the FFmpeg/MVD path from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and sends audio to NDSP.
+An unofficial, standalone **Jellyfin** client for the **Nintendo 3DS** family, built with [PocketJS](https://github.com/pocket-stack/pocketjs).
 
-**Targets original and New 3DS models.** Software playback is the default again after the reported MVD system-service crash. Hold **R while launching** on a New model to test the repaired experimental MVD path; **L** always forces software. A service abort cannot be recovered inside the app.
+**No companion PC, phone, proxy, or Jellyfin plugin is required.** The console connects directly to your Jellyfin server over Wi-Fi using `libcurl`, requests a constrained H.264/AAC MPEG-TS transcode, demuxes and decodes video with the FFmpeg/MVD pipeline from [bogocat/jellyfin-3ds](https://github.com/bogocat/jellyfin-3ds), and outputs stereo audio via NDSP.
 
-## v0.3.4 native-screen option
+---
 
-- On New 3DS, choose **Stream → Quality → Native** for a 400×240, up to 30 fps software transcode. Other presets keep their existing limits; original 3DS retains its 256×144, 12 fps limit.
-- Holding **R while launching** a New 3DS enables the experimental MVD path. Native then requests up to 400×240 at 60 fps; Standard and High keep the 24 fps MVD cap. MVD has caused system-service crashes on a real console and still needs testing. Normal startup stays on software.
-- Stream shows the actual decoded image size and measured presented frames per second separately from the requested limits. A video can have a lower source frame rate, or be letterboxed to preserve its aspect ratio. Requested 60 fps does not create extra source frames or guarantee smooth playback.
+## Features
 
-## v0.3.3 player and artwork
+- **Dual-Screen Native UI** — `400×240` top screen for video playback, artwork, and metadata; `320×240` bottom touchscreen for browsing, search, and playback controls.
+- **Direct Jellyfin Integration** — Browse libraries, series, seasons, episodes, and *Continue Watching*; search across your library; resume playback; and report progress automatically.
+- **Original & New 3DS Support** — Tuned stream profiles keep original 3DS/2DS consoles within software decode limits while unlocking higher-resolution presets on New 3DS models.
+- **Memory-Bounded Artwork Cache** — 8-slot (`2 MiB`) in-memory LRU cache with idle neighbor preloading and automatic pause during video playback.
+- **Touch & Button Navigation** — Inertial touch scrolling, draggable seek bar (single seek on release), D-pad/button shortcuts, and the native 3DS software keyboard.
 
-- Software video now packs red and blue in the GPU's RGB565 order; the inverted colors shown on the original-model screenshot should be corrected.
-- Now playing has a draggable timeline with a single seek on release, separate play/skip controls, and an accessible Stream panel. The panel shows decoded size and the requested H.264/AAC, resolution, frame-rate and bitrate caps. Standard/High changes the server's video bitrate limit while keeping the same decoder-safe dimensions and frame rate.
-- Artwork for the selected row starts sooner. The first visible library rows are preloaded one by one after the selected artwork request, then the cache follows nearby rows. Preloading pauses during playback and remains within the existing eight-image memory limit.
+---
 
-The color correction, quality negotiation and touch seek still need a physical-console check. The Home Menu banner remains silent; the authenticated launch splash is unchanged.
+## Stream Quality Presets
 
-## v0.3.2 cache, controls and MVD transport
+Select a preset during playback via **Now playing → Stream → Quality**.
 
-- Eight decoded thumbnails are retained in a **2 MiB memory LRU cache**. Nearby rows preload one at a time after the selected artwork loads, while browsing is idle. Background requests have a two-second timeout and pause during playback. The cache clears on sign-in/account expiry; it does not write images to the SD card.
-- **D-pad Up/Down** now focuses Resume, Start over and Back; **A** activates the highlighted action. Items without a resume point skip Start over.
-- MVD inputs now use the aligned linear allocation base for every NAL unit. The previous code sometimes passed base+1 when trimming a four-byte prefix. This is a candidate repair, not a hardware-verified fix. A native test now rejects unaligned submissions.
+| Model | Decoder | Standard | High | Native |
+| :--- | :--- | :--- | :--- | :--- |
+| **Original 3DS / 2DS** | Software (FFmpeg) | `256×144` · 12 fps · ≤192 kb/s | `256×144` · 12 fps · ≤320 kb/s | — |
+| **New 3DS / New 2DS** | Software (default) | `256×144` · 12 fps · ≤192 kb/s | `256×144` · 12 fps · ≤320 kb/s | `400×240` · 30 fps · ≤850 kb/s |
+| **New 3DS / New 2DS** | Experimental MVD (hold **R** on launch) | `400×240` · 24 fps · ≤472 kb/s | `400×240` · 24 fps · ≤700 kb/s | `400×240` · 60 fps · ≤1200 kb/s |
 
-Artwork errors and transfer diagnostics remain in `sd:/3ds/jellyfin-3ds/debug.log`. Both Account and the HOME Menu banner show **v0.3.2**. Banner audio remains removed; the authenticated launch splash is unchanged.
+> [!NOTE]
+> Software decoding is the default on all models. Holding **R** at launch on a New 3DS opts into the experimental hardware MVD decoder; holding **L** always forces software decoding. The Stream panel displays the actual decoded size and measured presented FPS separately from the requested caps.
 
-## Install with FBI
+---
 
-On the 3DS, open **FBI → Remote Install → Scan QR Code**, then scan this code. It resolves to the `Jellyfin3DS.cia` asset in the versioned `v0.3.4` GitHub Release.
+## Installation
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.4" width="320"></a>
+### Option 1: Install with FBI (QR Code)
 
-Direct URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia>
+Open **FBI → Remote Install → Scan QR Code** on your 3DS and scan the code below to install `Jellyfin3DS.cia` from the `v0.3.4` release:
 
-FBI needs anonymous access to the release asset. If this repository is private, use the manual download below until the repository or a binary-only release mirror is public.
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.4" width="280"></a>
 
-## Manual install
+Direct CIA URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia>
 
-Download the `Jellyfin3DS-install` artifact from a successful **Build 3DS homebrew** GitHub Actions run. It contains:
+*FBI requires anonymous access to the release asset. If the repository is private, use the manual install below.*
 
-- `3ds/Jellyfin3DS/Jellyfin3DS.3dsx` for Homebrew Launcher
-- `cias/Jellyfin3DS.cia` for FBI and a HOME Menu entry
-- the FBI QR image, installation instructions, and SHA-256 checksums
+### Option 2: Manual Install
 
-See [INSTALL.md](INSTALL.md) for SD-card placement, first-run sign-in, controls, and troubleshooting. A `.pocket` file is a PocketJS runtime package, not a Homebrew Launcher or FBI install file.
+Download the `Jellyfin3DS-install` artifact from a successful [**Build 3DS homebrew**](https://github.com/Jdiller-86/Jellyfin3DS/actions/workflows/build.yml) workflow run:
 
-## Develop
+- `3ds/Jellyfin3DS/Jellyfin3DS.3dsx` — Homebrew Launcher executable
+- `cias/Jellyfin3DS.cia` — FBI installable HOME Menu title
+- `INSTALL.md`, `FBI-QR.png`, and `SHA256SUMS`
+
+See [INSTALL.md](INSTALL.md) for SD-card layout, DSP firmware dumping, first-run sign-in, full control bindings, and troubleshooting.
+
+---
+
+## Architecture
+
+| Path | Role |
+| :--- | :--- |
+| [`app/`](app/) | SolidJS UI (`main.tsx`, `views.tsx`, `protocol.ts`, `stream.ts`) running on QuickJS inside PocketJS |
+| [`native/`](native/) | Bounded on-device C provider (`offload.c`, `offload_util.h`), media/keyboard bridge (`media.c`), MVD decoder (`mvd_decode.c`), artwork cache (`artwork.h`, `art_cache.h`), RGB565/YUV420P converter (`rgb565.h`, `software_video.inc`), and stream profiles (`stream_profile.h`) |
+| [`scripts/`](scripts/) | Build orchestration (`build.ts`, `package.ts`), non-invasive PocketJS/FFmpeg host staging (`native-host.ts`), icon/banner generators, and CIA binary verifier (`verify-cia.py`) |
+| [`test/`](test/) | Unit tests for protocol/stream helpers, host patching, artwork sizing/LRU cache, RGB565/YUV420P conversion, stream profiles, offload validation, and MVD transport |
+| [`tests-ui/`](tests-ui/) | End-to-end two-screen WASM UI journey test (`journey.test.ts`) |
+| [`vendor/`](vendor/) | Pinned `pocketjs` and `jellyfin-3ds` submodules |
+
+---
+
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) `1.4.2`
+- Docker + Rust `nightly-2026-07-02` (for full `.3dsx` / `.cia` cross-compilation)
+- A C compiler (`cc`) with AddressSanitizer/UBSan for native unit tests
+
+### Commands
 
 ```sh
-git clone --branch feat/pocketjs-client --recurse-submodules https://github.com/Jdiller-86/Jellyfin3DS.git
+git clone --recurse-submodules https://github.com/Jdiller-86/Jellyfin3DS.git
 cd Jellyfin3DS
-bun run setup
-bun run test
-bun run build:guest       # guest JS, assets, and admitted .pocket package
-bun run native:deps       # pinned 3DS portlibs, CA bundle, and FFmpeg (Docker)
-bun run build             # .3dsx and .cia; Docker + pinned Rust required
-bun run package           # SD/FBI distribution layout
+
+bun run setup         # Install JS dependencies
+bun run typecheck     # Run TypeScript type checking
+bun run test          # Run unit and native C tests
+bun run test:ui       # Build guest & run two-screen WASM UI journey test
+bun run build:guest   # Build guest JS, assets, and .pocket package
+bun run native:deps   # Prepare pinned 3DS portlibs, CA bundle, and FFmpeg (Docker)
+bun run build         # Cross-compile .3dsx and .cia (Docker + Rust)
+bun run package       # Assemble dist/install/ distribution layout
 ```
 
-CI uses Bun 1.4.2, PocketJS commit `a5a85356e172db8a32aefa983ee1259f60406f69`, bogocat/jellyfin-3ds commit `05bfa02f131d13f163bc7091d18af3b5b84f0820`, Rust `nightly-2026-07-02`, the PocketJS-pinned devkitPro container digest, and the reference client's pinned FFmpeg fork revision. The native dependencies are cached between CI runs.
+CI uses Bun `1.4.2`, PocketJS `a5a85356`, `bogocat/jellyfin-3ds` `05bfa02f`, Rust `nightly-2026-07-02`, and the pinned devkitARM container digest.
 
-## Security and storage
+---
 
-- The password exists only in the first-run UI and login request. It is cleared after the request and never written to the SD card.
-- The server URL, username, persistent device ID, Jellyfin user ID, and access token are stored at `/3ds/Jellyfin3DS/config.json` so the app can reconnect. Signing out removes the access token and user ID.
-- Tokens travel in HTTP headers, not stream URLs. Redirects are disabled so an authorization header cannot be forwarded to another host.
-- HTTPS certificate and hostname verification use the CA bundle embedded at build time. A private or self-signed certificate must be trusted by that bundle; otherwise use plain HTTP only on a network you trust.
-- The client accepts only `http://` and `https://` server URLs and bounds API responses, requests, item names, and five-item network batches and a rolling 40-item browse cache for 3DS memory limits.
+## Security & Storage
 
-## Current scope
+- **No stored passwords** — Your password exists only in the first-run UI and sign-in request, then is immediately cleared.
+- **Persistent config** — Server URL, username, device ID, user ID, and access token are saved to `sdmc:/3ds/Jellyfin3DS/config.json`. Signing out clears the token and user ID.
+- **Header-only auth** — Tokens are sent in `Authorization: MediaBrowser ...` HTTP headers, never in stream URLs. HTTP redirects are disabled (`CURLOPT_FOLLOWLOCATION = 0`) so tokens cannot be forwarded to another host.
+- **TLS verification** — HTTPS verifies certificates and hostnames against the embedded `romfs:/cacert.pem` bundle. Use plain `http://` only on a trusted local network.
+- **Bounded memory** — Only `http://` and `https://` URLs are accepted; API bodies, item names, 5-item network pages, and the rolling 40-item browse window are strictly bounded for 3DS RAM limits.
 
-- Default video and audio tracks; no subtitle picker or burn-in, media-version picker, live TV, DRM, offline downloads, music-only player, or stereoscopic playback.
-- Jellyfin transcodes to H.264 Baseline Level 3.1, AAC stereo, MPEG-TS, with model-specific size and frame-rate limits. Server transcoding must be enabled for the user.
-- Reverse-proxy base paths such as `https://media.example/jellyfin` are supported. HTTP redirects are not.
-- Browse remains available while a video runs on the upper screen; SELECT returns to player controls.
-- Progress is reported on playback start, pause/resume, about every five seconds, and stop. Power loss can lose the latest position.
+---
 
-`app/` contains the Solid/PocketJS interface. `native/` implements the bounded on-device provider and media adapter. `scripts/native-host.ts` stages the pinned reference decoder into PocketJS's 3DS host without modifying either submodule.
+## Current Scope & Documentation
 
-See [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and [VALIDATION.md](VALIDATION.md) for verification status.
+- **Scope:** Default video and audio tracks; H.264 Baseline Level 3.1 / AAC stereo / MPEG-TS server transcoding required. No subtitle picker, media-version picker, live TV, DRM, offline downloads, music-only player, or stereoscopic 3D playback.
+- **Progress reporting:** Reported on playback start, pause/resume, every ~5 seconds, and stop.
+- **Docs:** [INSTALL.md](INSTALL.md) · [CHANGELOG.md](CHANGELOG.md) · [VALIDATION.md](VALIDATION.md) · [THIRD_PARTY.md](THIRD_PARTY.md) · [LICENSE.md](LICENSE.md)

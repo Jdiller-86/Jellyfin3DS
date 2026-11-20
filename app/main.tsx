@@ -18,7 +18,14 @@ import {
   PAGE_SIZE,
   time,
 } from "./protocol.ts";
-import { clampPosition, progressWidth, seekAtX } from "./stream.ts";
+import { clampPosition, seekAtX } from "./stream.ts";
+import {
+  BrowserListView,
+  DetailView,
+  PlayerControlsView,
+  SetupView,
+  label,
+} from "./views.tsx";
 
 type Location = {
   mode: "libraries" | "folder" | "resume" | "search";
@@ -654,7 +661,6 @@ function App() {
   const visibleRows = () => page().items.slice(Math.floor(scrollY() / rowHeight), Math.floor(scrollY() / rowHeight) + 6);
   const subtitle = () => [metadata().series, metadata().episode ? `S${metadata().season ?? 0} E${metadata().episode}` : "", selected()?.year, metadata().rating, selected()?.seconds ? `${Math.round(selected()!.seconds / 60)} min` : "", metadata().genre].filter(Boolean).join(" · ");
   const overview = () => (metadata().overview ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-  const label = (value: string) => value.length > 40 ? `${value.slice(0, 37)}...` : value;
   const playbackSeconds = () => seekPreview() ?? (status()?.positionMs ?? 0) / 1000;
   const durationSeconds = () => playing()?.seconds ?? 0;
   const videoSize = () => (status()?.videoWidth && status()?.videoHeight)
@@ -716,27 +722,14 @@ function App() {
 
     <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
       <Show when={screen() === "setup"}>
-        <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]"><Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.4</Text></View>
-        <View class={setupField() === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(server())}</Text>
-        </View>
-        <View class={setupField() === 1 ? "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Username</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{username() || "Enter username"}</Text>
-        </View>
-        <View class={setupField() === 2 ? "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Password</Text><Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{passwordLabel()}</Text>
-        </View>
-        <View class={authenticated()
-          ? setupField() === 3
-            ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
-            : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"
-          : setupField() === 3
-            ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
-            : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}>
-          <Text class="text-sm text-[#3c4954] font-bold">Sign in [A]</Text>
-        </View>
-        <Show when={authenticated()}><View class={setupField() === 4 ? "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#fff1f1] to-[#f3d2d2] border-2 border-[#cf5a5a] rounded-lg" : "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#704040]">Sign out</Text></View></Show>
-        <Text class="absolute left-[8] top-[222] text-xs text-[#6a7680]">{authenticated() ? "B: Back" : providerReady() ? "A: Edit" : "Starting…"}</Text>
+        <SetupView
+          setupField={setupField()}
+          server={server()}
+          username={username()}
+          passwordLabel={passwordLabel()}
+          authenticated={authenticated()}
+          providerReady={providerReady()}
+        />
       </Show>
 
       <Show when={screen() === "browser"}>
@@ -744,51 +737,42 @@ function App() {
           <Text class="text-xs text-[#3c4954] font-bold">Libraries</Text><Text class="text-xs text-[#3c4954] font-bold">Continue</Text><Text class="text-xs text-[#75409b] font-bold">Search</Text><Text class="text-xs text-[#3c4954] font-bold">Account</Text>
         </View>
         <Show when={!controls() && !detail()}>
-          <Text class="absolute left-[8] top-[33] text-xs text-[#6a7680]">{label(where().title)}</Text>
-          <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#dde5eb]" />
-          <View class="absolute right-[1] w-[3] h-[12] bg-[#aa5cc3]" style={{insetT:48+128*(page().offset+index())/Math.max(1,page().total-1)}} />
-          <View class="absolute left-0 right-[4] top-[48] h-[140] overflow-hidden">
-            <For each={visibleRows()}>{item => <View style={{ insetT: page().items.indexOf(item) * rowHeight - scrollY() }} class={item === page().items[index()] ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
-              <Text class="absolute left-[6] top-[5] text-xs text-[#3c4954]">{item.folder ? "> " : item.played ? "✓ " : "  "}{label(item.name)}</Text>
-              <Show when={item.resume > 0 && item.seconds > 0}><View class="absolute left-[4] bottom-0 h-[2] bg-[#aa5cc3]" style={{width:Math.min(288, 288 * item.resume / item.seconds)}} /></Show>
-            </View>}</For>
-          </View>
-          <Show when={!page().items.length}><Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{busy() ? "Loading…" : where().mode === "search" ? "No results" : "No items"}</Text></Show>
-          <Show when={fetchingMore()}><View class="absolute left-[120] top-[168] w-[80] h-[20] rounded-lg bg-white items-center justify-center"><Text class="text-xs text-[#75409b]">Loading…</Text></View></Show>
-          <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg"><Text class="text-xs text-[#3c4954]">Back [B]</Text><Text class="text-xs text-[#75409b]">{playing() ? "Now playing [SELECT]" : `${page().total} items`}</Text></View>
+          <BrowserListView
+            title={where().title}
+            page={page()}
+            index={index()}
+            scrollY={scrollY()}
+            rowHeight={rowHeight}
+            visibleRows={visibleRows()}
+            busy={busy()}
+            mode={where().mode}
+            fetchingMore={fetchingMore()}
+            playing={Boolean(playing())}
+          />
         </Show>
         <Show when={detail() && !controls()}>
-          <Text class="absolute left-[10] top-[43] text-xs text-[#3c4954]">{label(detail()!.name)}</Text>
-          <View class={detailFocus() === 0 ? "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954]">{detail()!.resume ? `Resume ${time(detail()!.resume)} [A]` : "Play [A]"}</Text></View>
-          <Show when={detail()!.resume > 0}><View class={detailFocus() === 1 ? "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Start over</Text></View></Show>
-          <Show when={!detail()!.resume}><Text class="absolute left-[12] right-[12] top-[121] text-xs text-[#6a7680]">{overview().slice(0, 145)}</Text></Show>
-          <View class={detailFocus() === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">{playing() ? "Back / Now playing" : "Back [B]"}</Text></View>
+          <DetailView
+            item={detail()!}
+            detailFocus={detailFocus()}
+            overview={overview()}
+            playing={Boolean(playing())}
+          />
         </Show>
         <Show when={controls()}>
-          <Show when={!streamInfo()}>
-            <Text class="absolute left-[12] top-[38] text-sm text-[#3c4954] font-bold">{label(playing()?.name ?? "")}</Text>
-            <Text class="absolute left-[12] top-[59] text-xs text-[#75409b]">{status()?.phase ?? "Opening"} · {videoSize()} · {profile()?.hardware ? "MVD" : "CPU"}</Text>
-            <Text class="absolute left-[24] top-[79] text-xs text-[#3c4954]">{time(playbackSeconds())}</Text>
-            <Text class="absolute right-[24] top-[79] text-xs text-[#3c4954]">{time(durationSeconds())}</Text>
-            <View class="absolute left-[24] top-[104] w-[272] h-[6] rounded-lg bg-[#d6dce2]" />
-            <View class="absolute left-[24] top-[104] h-[6] rounded-lg bg-[#9452b3]" style={{width:progressWidth(playbackSeconds(),durationSeconds())}} />
-            <View class="absolute top-[98] w-[17] h-[18] rounded-lg bg-white border-2 border-[#9452b3]" style={{insetL:Math.min(287,16+progressWidth(playbackSeconds(),durationSeconds()))}} />
-            <View class="absolute left-[8] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">−10s</Text></View>
-            <View class={controlFocus() === 0 ? "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954] font-bold">{status()?.phase === "paused" ? "Play" : "Pause"}</Text></View>
-            <View class="absolute left-[216] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">+10s</Text></View>
-            <View class={controlFocus() === 1 ? "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stream</Text></View>
-            <View class={controlFocus() === 2 ? "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Browse</Text></View>
-            <View class={controlFocus() === 3 ? "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stop</Text></View>
-          </Show>
-          <Show when={streamInfo()}>
-            <Text class="absolute left-[12] top-[39] text-sm text-[#3c4954] font-bold">Stream</Text>
-            <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSize()} · {status()?.displayFps ? `${status()!.displayFps!.toFixed(1)} fps` : "measuring…"}</Text>
-            <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">{profile()?.hardware ? "MVD" : "CPU"} · H.264 / AAC · MPEG-TS</Text>
-            <Text class="absolute left-[12] top-[108] text-xs text-[#3c4954]">Max {profile()?.maxWidth ?? 256}×{profile()?.maxHeight ?? 144} · {profile()?.maxFps ?? 12} fps</Text>
-            <Text class="absolute left-[12] top-[126] text-xs text-[#6a7680]">Video ≤{profile()?.videoKbps ?? 192} kb/s · Audio ≤64 kb/s</Text>
-            <View class={infoFocus() === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{quality() === "native" ? "Native" : quality() === "high" ? "High" : "Standard"} ›</Text></View>
-            <View class={infoFocus() === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">−</Text><Text class="text-sm text-[#75409b]">Volume {Math.round(volume()*100)}%</Text><Text class="text-sm text-[#3c4954]">+</Text></View>
-          </Show>
+          <PlayerControlsView
+            streamInfo={streamInfo()}
+            title={playing()?.name ?? ""}
+            phase={status()?.phase ?? "Opening"}
+            videoSize={videoSize()}
+            displayFps={status()?.displayFps}
+            profile={profile()}
+            playbackSeconds={playbackSeconds()}
+            durationSeconds={durationSeconds()}
+            controlFocus={controlFocus()}
+            infoFocus={infoFocus()}
+            quality={quality()}
+            volume={volume()}
+          />
         </Show>
         <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || (controls() ? streamInfo() ? "B: Player · Left/Right: Volume" : "B: Browse · Left/Right: Seek" : "A: Open   X: Search"))}</Text>
       </Show>

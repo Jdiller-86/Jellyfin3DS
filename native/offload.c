@@ -6,6 +6,7 @@
 #include "direct_media.h"
 #include "artwork.h"
 #include "art_cache.h"
+#include "offload_util.h"
 #include "stream_profile.h"
 #include "util/log.h"
 #include "cJSON.h"
@@ -34,12 +35,20 @@
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
 #define HTTP_BODY_MAX (256u * 1024u)
-#define SERVER_MAX 512
-#define USERNAME_MAX 64
-#define TOKEN_MAX 256
-#define ID_MAX 64
+#define SERVER_MAX J3DS_SERVER_MAX
+#define USERNAME_MAX J3DS_USERNAME_MAX
+#define TOKEN_MAX J3DS_TOKEN_MAX
+#define ID_MAX J3DS_ID_MAX
 #define PAGE_SIZE 5
 #define PAYLOAD_MAX 2500
+
+#define copy_text j3ds_copy_text
+#define bounded_text j3ds_bounded_text
+#define valid_id j3ds_valid_id
+#define valid_token j3ds_valid_token
+#define normalize_server j3ds_normalize_server
+#define item_is_folder j3ds_item_is_folder
+#define utf8_copy j3ds_utf8_copy
 
 typedef struct {
   char server[SERVER_MAX];
@@ -61,20 +70,12 @@ static OffloadQueue incoming;
 static OffloadRecord ui_record;
 static _Atomic bool running;
 static _Atomic int connection;
-static _Atomic unsigned measured_frames;
-static _Atomic unsigned max_us;
-static _Atomic unsigned over_budget;
 static Thread worker;
 static unsigned sends;
 static unsigned takes;
 static Config config;
 static char playing_id[ID_MAX];
 static char playing_session[ID_MAX];
-
-static void copy_text(char *out, size_t capacity, const char *value) {
-  if (!capacity) return;
-  snprintf(out, capacity, "%s", value ? value : "");
-}
 
 static const cJSON *json_member(const cJSON *object, const char *key) {
   return cJSON_GetObjectItemCaseSensitive(object, key);
@@ -94,48 +95,6 @@ static double json_number(const cJSON *object, const char *key, double fallback)
 static bool json_bool(const cJSON *object, const char *key, bool fallback) {
   const cJSON *value = json_member(object, key);
   return cJSON_IsBool(value) ? cJSON_IsTrue(value) : fallback;
-}
-
-static bool bounded_text(const char *value, size_t limit, bool allow_empty) {
-  if (!value) return false;
-  size_t length = strlen(value);
-  if ((!allow_empty && !length) || length >= limit) return false;
-  for (size_t i = 0; i < length; i++) {
-    unsigned char c = (unsigned char)value[i];
-    if (c < 0x20 || c == 0x7f) return false;
-  }
-  return true;
-}
-
-static bool valid_id(const char *value) {
-  if (!bounded_text(value, ID_MAX, false)) return false;
-  for (size_t i = 0; value[i]; i++) {
-    unsigned char c = (unsigned char)value[i];
-    if (!isalnum(c) && c != '-' && c != '_') return false;
-  }
-  return true;
-}
-
-static bool valid_token(const char *value) {
-  if (!bounded_text(value, TOKEN_MAX, false)) return false;
-  for (size_t i = 0; value[i]; i++) {
-    unsigned char c = (unsigned char)value[i];
-    if (!isalnum(c) && c != '-' && c != '_' && c != '.' && c != '~') return false;
-  }
-  return true;
-}
-
-static bool normalize_server(const char *value, char *out, size_t capacity) {
-  if (!bounded_text(value, capacity, false)) return false;
-  if (strncmp(value, "http://", 7) != 0 && strncmp(value, "https://", 8) != 0)
-    return false;
-  if (strchr(value, '?') || strchr(value, '#') || strchr(value, '@')) return false;
-  for (size_t i = 0; value[i]; i++) if (isspace((unsigned char)value[i])) return false;
-  copy_text(out, capacity, value);
-  size_t length = strlen(out);
-  while (length > 8 && out[length - 1] == '/') out[--length] = 0;
-  const char *host = strstr(out, "://");
-  return host && host[3] && strcmp(host + 3, "localhost") != 0;
 }
 
 static bool authenticated(void) {
@@ -180,32 +139,31 @@ static void config_load(void) {
   memset(&config, 0, sizeof config);
   FILE *file = fopen(CONFIG_PATH, "rb");
   if (file) {
-    char text[2048];
+    char text[8192];
     size_t length = fread(text, 1, sizeof text - 1, file);
     bool complete = feof(file) != 0;
     fclose(file);
     text[length] = 0;
-    if (complete) {
-      cJSON *root = cJSON_ParseWithLength(text, length);
-      if (root) {
-        const char *server = json_string(root, "server");
-        const char *username = json_string(root, "username");
-        const char *token = json_string(root, "token");
-        const char *user_id = json_string(root, "userId");
-        const char *device_id = json_string(root, "deviceId");
-        char normalized[SERVER_MAX];
-        if (server && normalize_server(server, normalized, sizeof normalized))
-          copy_text(config.server, sizeof config.server, normalized);
-        if (username && bounded_text(username, USERNAME_MAX, true))
-          copy_text(config.username, sizeof config.username, username);
-        if (token && (!token[0] || valid_token(token)))
-          copy_text(config.token, sizeof config.token, token);
-        if (user_id && valid_id(user_id))
-          copy_text(config.user_id, sizeof config.user_id, user_id);
-        if (device_id && valid_id(device_id))
-          copy_text(config.device_id, sizeof config.device_id, device_id);
-        cJSON_Delete(root);
-      }
+    if (!complete) return;
+    cJSON *root = cJSON_ParseWithLength(text, length);
+    if (root) {
+      const char *server = json_string(root, "server");
+      const char *username = json_string(root, "username");
+      const char *token = json_string(root, "token");
+      const char *user_id = json_string(root, "userId");
+      const char *device_id = json_string(root, "deviceId");
+      char normalized[SERVER_MAX];
+      if (server && normalize_server(server, normalized, sizeof normalized))
+        copy_text(config.server, sizeof config.server, normalized);
+      if (username && bounded_text(username, USERNAME_MAX, true))
+        copy_text(config.username, sizeof config.username, username);
+      if (token && (!token[0] || valid_token(token)))
+        copy_text(config.token, sizeof config.token, token);
+      if (user_id && valid_id(user_id))
+        copy_text(config.user_id, sizeof config.user_id, user_id);
+      if (device_id && valid_id(device_id))
+        copy_text(config.device_id, sizeof config.device_id, device_id);
+      cJSON_Delete(root);
     }
   }
   if (!valid_id(config.device_id)) {
@@ -258,24 +216,11 @@ static void http_error(char *error, size_t capacity, CURLcode result, long statu
   else copy_text(error, capacity, "Jellyfin network request failed");
 }
 
-static bool http_json(const Config *session, const char *method, const char *url,
-                      const char *json_body, bool use_token, cJSON **json_out,
-                      long *status_out, char *error, size_t error_capacity) {
-  *json_out = NULL;
-  *status_out = 0;
-  char soc_error[128] = {0};
-  if (!soc_ensure(soc_error, sizeof soc_error)) {
-    copy_text(error, error_capacity,
-              soc_error[0] ? soc_error : "Nintendo 3DS network is unavailable");
-    return false;
-  }
-
+static CURL *http_curl_init(const Config *session, const char *url, bool use_token,
+                            long connect_ms, long timeout_ms, HttpBody *response,
+                            struct curl_slist **headers_out) {
   CURL *curl = curl_easy_init();
-  if (!curl) {
-    copy_text(error, error_capacity, "Could not initialize networking");
-    return false;
-  }
-  HttpBody response = {0};
+  if (!curl) return NULL;
   char auth[768];
   if (use_token && session->token[0]) {
     snprintf(auth, sizeof auth,
@@ -288,19 +233,13 @@ static bool http_json(const Config *session, const char *method, const char *url
       "DeviceId=\"%s\", Version=\"%s\"",
       session->device_id, APP_VERSION);
   }
-  struct curl_slist *headers = NULL;
-  headers = curl_slist_append(headers, auth);
-  headers = curl_slist_append(headers, "Accept: application/json");
-  if (strcmp(method, "POST") == 0)
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-
+  struct curl_slist *headers = curl_slist_append(NULL, auth);
   curl_easy_setopt(curl, CURLOPT_URL, url);
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin3DS/" APP_VERSION);
-  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 5000L);
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 8500L);
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, connect_ms);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
   curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
   curl_easy_setopt(curl, CURLOPT_PROTOCOLS,
@@ -308,12 +247,38 @@ static bool http_json(const Config *session, const char *method, const char *url
   curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
   curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
   curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/cacert.pem");
+  *headers_out = headers;
+  return curl;
+}
+
+static bool http_json(const Config *session, const char *method, const char *url,
+                      const char *json_body, bool use_token, cJSON **json_out,
+                      long *status_out, char *error, size_t error_capacity) {
+  *json_out = NULL;
+  *status_out = 0;
+  char soc_error[128] = {0};
+  if (!soc_ensure(soc_error, sizeof soc_error)) {
+    copy_text(error, error_capacity,
+              soc_error[0] ? soc_error : "Nintendo 3DS network is unavailable");
+    return false;
+  }
+
+  HttpBody response = {0};
+  struct curl_slist *headers = NULL;
+  CURL *curl = http_curl_init(session, url, use_token, 5000L, 8500L, &response, &headers);
+  if (!curl) {
+    copy_text(error, error_capacity, "Could not initialize networking");
+    return false;
+  }
+  headers = curl_slist_append(headers, "Accept: application/json");
   if (strcmp(method, "POST") == 0) {
+    headers = curl_slist_append(headers, "Content-Type: application/json");
     const char *body = json_body ? json_body : "{}";
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
   }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
   CURLcode result = curl_easy_perform(curl);
   long status = 0;
@@ -425,25 +390,6 @@ static void expire_session(void) {
   playing_session[0] = 0;
   direct_media_forget_prepared();
   config_save();
-}
-
-static bool item_is_folder(const char *type) {
-  static const char *folders[] = {
-    "CollectionFolder", "UserView", "Folder", "Series", "Season",
-    "BoxSet", "Playlist", "MusicAlbum", "MusicArtist"
-  };
-  for (size_t i = 0; i < sizeof folders / sizeof folders[0]; i++)
-    if (strcmp(type, folders[i]) == 0) return true;
-  return false;
-}
-
-static void utf8_copy(char *out, size_t capacity, const char *value) {
-  if (!capacity) return;
-  if (!value) value = "";
-  size_t length = strlen(value), take = length < capacity ? length : capacity - 1;
-  /* Cut before an incomplete code point, preserving complete multibyte names. */
-  if (take < length) while (take && ((unsigned char)value[take] & 0xc0u) == 0x80u) --take;
-  memcpy(out, value, take); out[take] = 0;
 }
 
 static cJSON *compact_item(const cJSON *source) {
@@ -716,10 +662,7 @@ static bool art_command(const cJSON *command, cJSON **result) {
   bool preload=json_bool(command,"preload",false);
   uint8_t *cached=art_cache_get(key);
   if(cached) { art_cached_reply(*result,cached,preload); return true; }
-  char suffix[256], url[SERVER_MAX + 256], token[768];
-  snprintf(token, sizeof token,
-    "Authorization: MediaBrowser Client=\"Jellyfin3DS\", Device=\"Nintendo 3DS\", DeviceId=\"%s\", Version=\"%s\", Token=\"%s\"",
-    config.device_id, APP_VERSION, config.token);
+  char suffix[256], url[SERVER_MAX + 256];
   const char *fallback = json_string(command, "fallback");
   const char *kinds[] = {"Primary", "Backdrop", "Thumb"};
   int attempts = valid_id(fallback) && strcmp(fallback, id) ? 6 : 3;
@@ -733,23 +676,11 @@ static bool art_command(const cJSON *command, cJSON **result) {
     const char *image_id = kind < 3 ? id : fallback;
     snprintf(suffix, sizeof suffix, "/Items/%s/Images/%s?MaxWidth=256&MaxHeight=144&Format=jpg&Quality=80", image_id, kinds[kind % 3]);
     if (!make_url(url, sizeof url, config.server, suffix)) break;
-    CURL *curl = curl_easy_init();
-    if (!curl) break;
     HttpBody body = {0};
-    struct curl_slist *headers = curl_slist_append(NULL, token);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
+    struct curl_slist *headers = NULL;
+    CURL *curl = http_curl_init(&config, url, true, preload ? 1000L : 2000L, preload ? 2000L : 4000L, &body, &headers);
+    if (!curl) break;
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin3DS/" APP_VERSION);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, preload ? 1000L : 2000L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, preload ? 2000L : 4000L);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
-    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-    curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/cacert.pem");
     CURLcode code = curl_easy_perform(curl);
     long status = 0; curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     curl_easy_cleanup(curl); curl_slist_free_all(headers);
@@ -943,14 +874,7 @@ static void serve(void *unused) {
   atomic_store_explicit(&connection, 0, memory_order_release);
 }
 
-void offload_measure(unsigned microseconds) {
-  atomic_fetch_add_explicit(&measured_frames, 1, memory_order_relaxed);
-  if (microseconds > 16667)
-    atomic_fetch_add_explicit(&over_budget, 1, memory_order_relaxed);
-  unsigned previous = atomic_load_explicit(&max_us, memory_order_relaxed);
-  if (microseconds > previous)
-    atomic_store_explicit(&max_us, microseconds, memory_order_relaxed);
-}
+void offload_measure(unsigned microseconds) { (void)microseconds; }
 
 void offload_frame(void) { sends = takes = 0; }
 

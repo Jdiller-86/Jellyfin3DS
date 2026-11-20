@@ -161,6 +161,32 @@ bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_si
 
 /* ── Decode a video packet ─────────────────────────────────────────── */
 
+static bool mvd_submit_nal(mvd_ctx_t *ctx, const uint8_t *nal, size_t length,
+                           bool *decoded, Result *ret_out)
+{
+    if (!length || (nal[0] & 0x80)) return false;
+    unsigned type = nal[0] & 31;
+    if (type != 1 && type != 5 && type != 7 && type != 8) return true;
+    if (length + 3 > (size_t)ctx->nal_buf_size) return false;
+
+    ctx->nal_buf[0] = 0x00;
+    ctx->nal_buf[1] = 0x00;
+    ctx->nal_buf[2] = 0x01;
+    memcpy(ctx->nal_buf + 3, nal, length);
+    GSPGPU_FlushDataCache(ctx->nal_buf, length + 3);
+    void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
+    if (!mapped || ((uintptr_t)mapped & 3)) return false;
+
+    Result ret = mvdstdProcessVideoFrame(mapped, length + 3, 0, NULL);
+    static unsigned unit_logs;
+    if (unit_logs++ < 12 || !MVD_CHECKNALUPROC_SUCCESS(ret))
+        log_write("MVD unit=%u bytes=%lu status=%08lx", type, (unsigned long)length, (unsigned long)ret);
+    if (!MVD_CHECKNALUPROC_SUCCESS(ret)) { *ret_out = ret; return false; }
+    if (ret == MVD_STATUS_FRAMEREADY) *decoded = true;
+    *ret_out = ret;
+    return true;
+}
+
 bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
 {
     if (!ctx->initialized || !data || size <= 0)
@@ -168,52 +194,33 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
 
     /* Detect packet format:
      * - TS demuxer: already Annex B (starts with 00 00 00 01 or 00 00 01)
-     * - MP4 demuxer: AVCC format (4-byte big-endian length prefix)
-     * Check by looking for Annex B start code at the beginning. */
+     * - MP4 demuxer: AVCC format (4-byte big-endian length prefix) */
     bool is_annexb = (size >= 4 &&
                       data[0] == 0x00 && data[1] == 0x00 &&
                       (data[2] == 0x01 || (data[2] == 0x00 && data[3] == 0x01)));
 
-    int dst_off = 0;
-
-    if (is_annexb) {
-        /* Already Annex B — copy directly to linear memory buffer.
-         * SPS/PPS are inline in the stream, MVD handles them automatically. */
-        if (size > ctx->nal_buf_size) return false;
-        memcpy(ctx->nal_buf, data, size);
-        dst_off = size;
-    } else {
-        /* AVCC format — convert to Annex B */
-        int src_off = 0;
-        while (src_off + 4 < size && dst_off + 3 < ctx->nal_buf_size) {
-            uint32_t nal_size = ((uint32_t)data[src_off] << 24) |
-                                ((uint32_t)data[src_off + 1] << 16) |
-                                ((uint32_t)data[src_off + 2] << 8) |
-                                (uint32_t)data[src_off + 3];
-            src_off += 4;
-
-            if (!nal_size || nal_size > (uint32_t)(size - src_off) ||
-                nal_size > (uint32_t)(ctx->nal_buf_size - dst_off - 3)) return false;
-
-            ctx->nal_buf[dst_off++] = 0x00;
-            ctx->nal_buf[dst_off++] = 0x00;
-            ctx->nal_buf[dst_off++] = 0x01;
-
-            memcpy(ctx->nal_buf + dst_off, data + src_off, nal_size);
-            dst_off += nal_size;
-            src_off += nal_size;
-        }
-        if (src_off != size) return false;
-    }
-
-    if (dst_off == 0)
-        return false;
+    if (size > ctx->nal_buf_size) return false;
 
     /* Sanity check: reject obviously corrupt NAL data before feeding MVD.
      * MVD operates via DMA — corrupt input can crash the entire system. */
-    if (dst_off < 5) {
-        log_write("MVD: NAL too small (%d bytes), skipping", dst_off);
+    if (size < 5) {
+        log_write("MVD: NAL too small (%d bytes), skipping", size);
         return false;
+    }
+
+    if (!is_annexb) {
+        int check_off = 0;
+        while (check_off + 4 < size) {
+            uint32_t nal_size = ((uint32_t)data[check_off] << 24) |
+                                ((uint32_t)data[check_off + 1] << 16) |
+                                ((uint32_t)data[check_off + 2] << 8) |
+                                (uint32_t)data[check_off + 3];
+            check_off += 4;
+            if (!nal_size || nal_size > (uint32_t)(size - check_off) ||
+                nal_size + 3 > (uint32_t)ctx->nal_buf_size) return false;
+            check_off += (int)nal_size;
+        }
+        if (check_off != size) return false;
     }
 
     /* Set output config for the current write buffer */
@@ -228,51 +235,48 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
      * system process treats an early rendering request as a fatal state. */
     GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], ctx->width * ctx->height * 2);
 
-    /* Preserve parsing bytes separately. Every IPC must use the aligned
-     * linear allocation base, never base+1 to trim a four-byte start code. */
-    uint8_t *packet = malloc(dst_off);
-    if (!packet) return false;
-    memcpy(packet, ctx->nal_buf, dst_off);
     Result ret = MVD_STATUS_PARAMSET;
     bool decoded = false;
-    int start = 0;
-    while (start < dst_off) {
-        int prefix = 0;
-        if (start + 3 <= dst_off && !packet[start] && !packet[start+1]) {
-            if (packet[start+2] == 1) prefix = 3;
-            else if (start + 4 <= dst_off && !packet[start+2] && packet[start+3] == 1) prefix = 4;
+
+    if (is_annexb) {
+        int start = 0;
+        while (start < size) {
+            int prefix = 0;
+            if (start + 3 <= size && !data[start] && !data[start + 1]) {
+                if (data[start + 2] == 1) prefix = 3;
+                else if (start + 4 <= size && !data[start + 2] && data[start + 3] == 1) prefix = 4;
+            }
+            if (!prefix) return false;
+            int end = start + prefix;
+            while (end < size) {
+                if (end + 3 <= size && !data[end] && !data[end + 1] &&
+                    (data[end + 2] == 1 || (end + 4 <= size && !data[end + 2] && data[end + 3] == 1))) break;
+                ++end;
+            }
+            if (end <= start + prefix) return false;
+            if (!mvd_submit_nal(ctx, data + start + prefix, (size_t)(end - start - prefix), &decoded, &ret))
+                return false;
+            start = end;
         }
-        if (!prefix) { free(packet); return false; }
-        int end = start + prefix;
-        while (end < dst_off) {
-            if (end + 3 <= dst_off && !packet[end] && !packet[end+1] &&
-                (packet[end+2] == 1 || (end + 4 <= dst_off && !packet[end+2] && packet[end+3] == 1))) break;
-            ++end;
+    } else {
+        int src_off = 0;
+        while (src_off + 4 < size) {
+            uint32_t nal_size = ((uint32_t)data[src_off] << 24) |
+                                ((uint32_t)data[src_off + 1] << 16) |
+                                ((uint32_t)data[src_off + 2] << 8) |
+                                (uint32_t)data[src_off + 3];
+            src_off += 4;
+            if (!mvd_submit_nal(ctx, data + src_off, nal_size, &decoded, &ret))
+                return false;
+            src_off += (int)nal_size;
         }
-        if (end <= start + prefix || (packet[start+prefix] & 0x80)) { free(packet); return false; }
-        unsigned type = packet[start+prefix] & 31;
-        if (type != 1 && type != 5 && type != 7 && type != 8) { start = end; continue; }
-        size_t length = end - start - prefix;
-        ctx->nal_buf[0] = ctx->nal_buf[1] = 0; ctx->nal_buf[2] = 1;
-        memcpy(ctx->nal_buf + 3, packet + start + prefix, length);
-        GSPGPU_FlushDataCache(ctx->nal_buf, length + 3);
-        void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
-        if (!mapped || ((uintptr_t)mapped & 3)) { free(packet); return false; }
-        ret = mvdstdProcessVideoFrame(mapped, length + 3, 0, NULL);
-        static unsigned unit_logs;
-        if (unit_logs++ < 12 || !MVD_CHECKNALUPROC_SUCCESS(ret))
-            log_write("MVD unit=%u bytes=%lu status=%08lx", type, (unsigned long)length, (unsigned long)ret);
-        if (!MVD_CHECKNALUPROC_SUCCESS(ret)) { free(packet); return false; }
-        if (ret == MVD_STATUS_FRAMEREADY) decoded = true;
-        start = end;
     }
-    free(packet);
 
     static int frame_count = 0;
     frame_count++;
     if (frame_count <= 5 || frame_count % 100 == 0) {
         log_write("MVD: ProcessNAL ret=0x%08lX nal_size=%d frame#%d",
-                  (unsigned long)ret, dst_off, frame_count);
+                  (unsigned long)ret, size, frame_count);
     }
 
     if (R_FAILED(ret) && !MVD_CHECKNALUPROC_SUCCESS(ret)) {

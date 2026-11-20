@@ -21,7 +21,6 @@ typedef struct {
   char token[DIRECT_TOKEN_MAX];
   int64_t duration_ticks;
   int64_t seek_ticks;
-  unsigned generation;
   bool ready;
 } PreparedStream;
 
@@ -43,7 +42,6 @@ static bool new_model_supported;
 bool direct_media_is_new_model(void) { return new_model_supported; }
 static float desired_volume = 0.8f;
 static int32_t texture_handle = -1;
-static unsigned generation;
 static uint8_t *art_pending;
 static int art_width, art_height, art_handle = -1;
 static unsigned art_request, art_complete;
@@ -173,7 +171,6 @@ bool direct_media_prepare(const char *url, const char *token,
   copy_text(prepared.token, sizeof prepared.token, token);
   prepared.duration_ticks = duration_ticks;
   prepared.seek_ticks = seek_ticks;
-  prepared.generation = ++generation;
   prepared.ready = true;
   LightLock_Unlock(&prepared_lock);
   return true;
@@ -372,7 +369,7 @@ void media_snapshot(char *out, size_t capacity) {
       case VIDEO_PLAYING: phase = desired_paused ? "paused" : "playing"; break;
       case VIDEO_PAUSED: phase = "paused"; break;
       case VIDEO_ERROR: phase = "error"; break;
-      case VIDEO_STOPPED: phase = has_frame ? "ended" : "opening"; break;
+      case VIDEO_STOPPED: phase = status.error_msg[0] ? "error" : "ended"; break;
       default: break;
     }
   }

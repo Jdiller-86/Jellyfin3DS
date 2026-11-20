@@ -6,26 +6,16 @@
 #include "rgb565.h"
 _Static_assert(sizeof(enum AVColorSpace) == 4 && sizeof(enum AVCodecID) == 4,
                "FFmpeg public enum ABI must match its 32-bit enum build");
-static unsigned char clamp_color(int x) { return x < 0 ? 0 : x > 255 ? 255 : x; }
 
 static bool software_frame(AVFrame *frame, u16 *pixels, int width, int height)
 {
     if (frame->format != AV_PIX_FMT_YUV420P || frame->width != width ||
-        frame->height != height || !frame->data[0] || !frame->data[1] || !frame->data[2])
+        frame->height != height)
         return false;
-    for (int y = 0; y < height; ++y) {
-        const u8 *luma = frame->data[0] + y * frame->linesize[0];
-        const u8 *cb = frame->data[1] + (y / 2) * frame->linesize[1];
-        const u8 *cr = frame->data[2] + (y / 2) * frame->linesize[2];
-        for (int x = 0; x < width; ++x) {
-            int c = luma[x] - 16, d = cb[x / 2] - 128, e = cr[x / 2] - 128;
-            unsigned r = clamp_color((298 * c + 409 * e + 128) >> 8);
-            unsigned g = clamp_color((298 * c - 100 * d - 208 * e + 128) >> 8);
-            unsigned b = clamp_color((298 * c + 516 * d + 128) >> 8);
-            pixels[y * width + x] = j3ds_rgb565(r, g, b);
-        }
-    }
-    return true;
+    return j3ds_yuv420p_to_rgb565(frame->data[0], frame->linesize[0],
+                                  frame->data[1], frame->linesize[1],
+                                  frame->data[2], frame->linesize[2],
+                                  pixels, width, height);
 }
 
 static void software_decode_thread(void)
