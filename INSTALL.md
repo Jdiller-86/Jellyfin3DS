@@ -1,0 +1,114 @@
+# Install Jellyfin3DS
+
+## Requirements
+
+- An **original 3DS / 3DS XL / 2DS or New 3DS / New 3DS XL (LL) / New 2DS XL** with custom firmware, Wi-Fi, and DSP firmware on the SD card
+- Homebrew Launcher for the `.3dsx`, or FBI for the `.cia`
+- A reachable Jellyfin server with transcoding enabled for your user
+- The Jellyfin server URL, username, and password
+
+No computer, phone, companion app, proxy, administrator API key, or Jellyfin plugin is required while using Jellyfin3DS.
+
+## 1. Install the application
+
+For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
+
+```text
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia
+```
+
+FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
+
+For a manual install, open **Actions → Build 3DS homebrew → a successful run → Artifacts → Jellyfin3DS-install** in the GitHub repository and extract the ZIP.
+
+For Homebrew Launcher, copy the extracted `3ds` directory to the SD-card root. The final path must be:
+
+```text
+/3ds/Jellyfin3DS/Jellyfin3DS.3dsx
+```
+
+For a HOME Menu entry, copy `cias/Jellyfin3DS.cia` to the SD card, then choose **FBI → SD → cias → Jellyfin3DS.cia → Install CIA**. Only one launch method is needed.
+
+If audio DSP firmware is absent, open Rosalina with L + Down + SELECT and choose **Miscellaneous options → Dump DSP firmware**. This creates `/3ds/dspfirm.cdc`. Do not download another console's firmware.
+
+If the banner still shows an older version, use a clean reinstall to clear stale HOME Menu content:
+
+1. In FBI → Titles, select **Jellyfin3DS** (title ID `000400000FF00900`) and choose **Delete Title**. Do not select another title.
+2. Exit to HOME Menu and wait for its icon to disappear, then reboot.
+3. Open FBI and install v0.3.4 using the QR code above or the CIA download.
+4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.4**. Reboot once before testing launch.
+
+Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.4 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
+
+## 2. Sign in on the 3DS
+
+Launch Jellyfin3DS and complete **Account** on the lower screen:
+
+1. Enter the full server URL, including `http://` or `https://`, port, and any reverse-proxy path. Example: `http://192.168.1.20:8096`.
+2. Enter the Jellyfin username.
+3. Enter the password and choose **Sign in**.
+
+Touch a field or select it with the D-pad and A. The keyboard uses START to accept and B to close. The password is cleared after sign-in. The app stores the issued Jellyfin token at `/3ds/Jellyfin3DS/config.json`; open **Account** to change servers or sign out.
+
+For HTTPS, the certificate must chain to a public CA included in the app. Self-signed or private-CA certificates are rejected. Plain HTTP is suitable only on a local network you trust.
+
+## Controls
+
+| Control | Action |
+| --- | --- |
+| D-pad Up/Down | Select a list or highlighted player/settings action |
+| A | Confirm the highlighted action; pause/play when Play is focused |
+| B | Back; close the keyboard |
+| Vertical swipe | Scroll continuously; release to coast |
+| Now playing | Return to controls without restarting video |
+| Left/Right | Seek 10 seconds in player controls; adjust volume in Stream |
+| X | Open search; START submits the keyboard |
+| Y | Continue watching |
+| SELECT | Open Account, or switch back to active player controls |
+| START | Pause/resume during playback |
+| L / R | Seek backward/forward 10 seconds |
+| Touch screen | Tap a row to preview art, tap again to open; swipe vertically to browse; drag or tap the playback timeline to seek |
+| L + R + START | Exit the PocketJS host |
+
+Stop playback before exiting when possible so Jellyfin receives the latest resume position.
+
+## Troubleshooting
+
+**Could not reach the Jellyfin server:** confirm the 3DS has Wi-Fi, the URL and port are correct, and the server allows connections from the console's network. Guest Wi-Fi isolation can block LAN servers.
+
+**TLS certificate is not trusted:** use a certificate from a public CA in the bundled trust store, or use local HTTP on a trusted LAN. Certificate checking cannot be disabled in the app.
+
+**Username or password is incorrect:** reopen Account and enter the credentials again. The password is not stored.
+
+**Video could not start:** check DSP firmware and Jellyfin transcoding permissions. Hold L while launching to force software decoding at 256×144/12 fps. Software is now the default; hold R while launching on New models to test experimental MVD; the player displays MVD or CPU. Console performance remains experimental.
+
+**Audio output unavailable:** dump DSP firmware with Rosalina, then restart the application.
+
+**Demux, decode, or buffering error:** confirm the item is playable by that Jellyfin user and the server can transcode it to H.264/AAC MPEG-TS. The first version does not support live TV, DRM, subtitles, or alternate track selection.
+
+**CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
+
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.4` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+
+
+## Confirm the installed build
+
+Open Account and check **v0.3.4**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
+
+## Native-screen video on New 3DS
+
+Open **Now playing → Stream → Quality** and select **Native**. Normal startup requests up to **400×240 at 30 fps** using software decoding; Standard and High keep the lower software limits. On New 3DS, holding **R throughout launch** enables the experimental MVD decoder and lets Native request up to **400×240 at 60 fps**. MVD may still crash the system service, so use normal startup unless testing it. Original 3DS retains the safer 256×144, 12 fps stream limits. L at startup forces software.
+
+The Stream panel shows the decoded size and actual measured presentation rate. An aspect-preserving transcode may fill less than the full 400×240 screen. A 24 fps source remains 24 fps, and requests for 30 or 60 fps can exceed what the server or decoder can deliver. Switch to Standard if Native stalls or drops frames. Changing quality restarts the stream near your current position.
+
+If artwork still fails, note the message in its preview and copy `sd:/3ds/jellyfin-3ds/debug.log` immediately after reproducing it, before relaunching (the log resets at startup). The ART lines include HTTP status, transfer result and texture handle without credentials.
+
+The app banner contains no sound resource. If beeping persists with both versions verified, a short recording from selecting the icon through launch will distinguish the console sound from cached banner content.
+
+## v0.3.3 controls, stream and artwork
+
+Use D-pad Up/Down and A on the Resume / Start over / Back menu. Missing resume points skip Start over. In Now playing, drag or tap the timeline to seek; L/R or Left/Right skip ten seconds, A pauses or plays, and Stream shows the current decoded size and requested stream limits. In Stream, choose Standard or High to change the video bitrate cap; changing it restarts the server stream at the current position. Physical console volume also works, or use the on-screen volume control. B returns to playback controls.
+
+Artwork caching is automatic, memory-only and capped at eight thumbnails (2 MiB). The selected item's image loads sooner when a library opens; the first nearby rows preload sequentially when browsing is idle. Thumbnails fetched previously in the same account session reuse memory without a second network download.
+
+MVD remains experimental after the reported system-service crash. Normal launch uses software on all models. Hold R through startup on a New model to test the aligned-input repair; L overrides R and forces software. If it still crashes, preserve the `.dmp` in `sd:/luma/dumps/arm11/` and `sd:/3ds/jellyfin-3ds/debug.log` before relaunching.
