@@ -22,6 +22,7 @@ import { clampPosition, seekAtX } from "./stream.ts";
 import {
   BrowserListView,
   DetailView,
+  NavBar,
   PlayerControlsView,
   SetupView,
   label,
@@ -525,9 +526,9 @@ function App() {
         return;
       }
       if (contact.y >= 48 && contact.y < 188) {
-        const item = page().items[Math.floor((contact.y - 48 + scrollY()) / rowHeight)];
+        const row = Math.floor((contact.y - 48 + scrollY()) / rowHeight);
+        const item = page().items[row];
         if (item) {
-          const row = Math.floor((contact.y - 48 + scrollY()) / rowHeight);
           if (row === index()) open(item); else setIndex(row);
         }
       }
@@ -667,8 +668,8 @@ function App() {
     ? `${status()!.videoWidth}×${status()!.videoHeight}` : "Waiting for video";
   const passwordLabel = () => password().length ? "*".repeat(Math.min(24, password().length)) : "Password";
   const videoRect = () => {
-    const width = Math.max(1, status()?.videoWidth ?? 400);
-    const height = Math.max(1, status()?.videoHeight ?? 240);
+    const width = Math.max(1, status()?.videoWidth || 400);
+    const height = Math.max(1, status()?.videoHeight || 240);
     const scale = Math.min(400 / width, 240 / height);
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
@@ -695,7 +696,7 @@ function App() {
       </View>
       <Show when={!playing() && screen() === "browser"}>
         <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
-          <View class="absolute left-[59] top-[4] w-[256] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center" style={{height:detail()?100:144}}>
+          <View class="absolute left-[60] top-[4] w-[256] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center" style={{height:detail()?100:144}}>
             <Text class="text-sm text-[#8c9ba6]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
             <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
               class="absolute top-0" style={{insetL:detail()?39:0,width:detail()?178:256,height:detail()?178:256,opacity:art()?1:0}} />
@@ -716,7 +717,10 @@ function App() {
         <View class="absolute left-[20] right-[20] bottom-[30] p-[8] rounded-lg bg-[#fff8df] border border-[#dacb99]"><Text class="text-xs text-[#6a5b36]">{message()}</Text></View>
       </Show>
       <Show when={playing() && !(status()?.presentedFrames)}>
-        <View class="absolute inset-0 items-center justify-center"><Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text></View>
+        <View class="absolute inset-0 items-center justify-center flex-col gap-1">
+          <Text class="text-sm text-[#dfc5ed] font-bold">{label(playing()?.name ?? "")}</Text>
+          <Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text>
+        </View>
       </Show>
     </View>
 
@@ -733,9 +737,7 @@ function App() {
       </Show>
 
       <Show when={screen() === "browser"}>
-        <View class="absolute left-0 top-0 w-full h-[32] flex-row items-center justify-around bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]">
-          <Text class="text-xs text-[#3c4954] font-bold">Libraries</Text><Text class="text-xs text-[#3c4954] font-bold">Continue</Text><Text class="text-xs text-[#75409b] font-bold">Search</Text><Text class="text-xs text-[#3c4954] font-bold">Account</Text>
-        </View>
+        <NavBar mode={where().mode} />
         <Show when={!controls() && !detail()}>
           <BrowserListView
             title={where().title}

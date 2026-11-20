@@ -53,6 +53,25 @@ export function SetupView(props: {
   );
 }
 
+export function NavBar(props: { mode: string; inSetup?: boolean }) {
+  const tab = (active: boolean, labelText: string) => (
+    <View class="w-[80] h-full items-center justify-center relative">
+      <Text class={active ? "text-xs text-[#75409b] font-bold" : "text-xs text-[#3c4954] font-bold"}>{labelText}</Text>
+      <Show when={active}>
+        <View class="absolute left-[10] right-[10] bottom-0 h-[2] bg-[#aa5cc3]" />
+      </Show>
+    </View>
+  );
+  return (
+    <View class="absolute left-0 top-0 w-full h-[32] flex-row items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]">
+      {tab(!props.inSetup && (props.mode === "libraries" || props.mode === "folder"), "Libraries")}
+      {tab(!props.inSetup && props.mode === "resume", "Continue")}
+      {tab(!props.inSetup && props.mode === "search", "Search")}
+      {tab(Boolean(props.inSetup), "Account")}
+    </View>
+  );
+}
+
 export function BrowserListView(props: {
   title: string;
   page: Page;
@@ -68,6 +87,9 @@ export function BrowserListView(props: {
   return (
     <>
       <Text class="absolute left-[8] top-[33] text-xs text-[#6a7680]">{label(props.title)}</Text>
+      <Show when={props.page.total > 0}>
+        <Text class="absolute right-[8] top-[33] text-xs text-[#8c9ba6]">{props.page.offset + props.index + 1}/{props.page.total}</Text>
+      </Show>
       <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#dde5eb]" />
       <View class="absolute right-[1] w-[3] h-[12] bg-[#aa5cc3]" style={{ insetT: 48 + 128 * (props.page.offset + props.index) / Math.max(1, props.page.total - 1) }} />
       <View class="absolute left-0 right-[4] top-[48] h-[140] overflow-hidden">
@@ -84,7 +106,7 @@ export function BrowserListView(props: {
         <Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{props.busy ? "Loading…" : props.mode === "search" ? "No results" : "No items"}</Text>
       </Show>
       <Show when={props.fetchingMore}>
-        <View class="absolute left-[120] top-[168] w-[80] h-[20] rounded-lg bg-white items-center justify-center">
+        <View class="absolute left-[120] top-[168] w-[80] h-[20] rounded-lg bg-white border border-[#c4cbd1] items-center justify-center">
           <Text class="text-xs text-[#75409b]">Loading…</Text>
         </View>
       </Show>
