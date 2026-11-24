@@ -21,7 +21,6 @@ import {
 import { clampPosition, seekAtX } from "./stream.ts";
 import {
   ROW_HEIGHT,
-  UI,
   clampScroll as clampListScroll,
   hitTestControls,
   hitTestDetail,
@@ -200,14 +199,16 @@ function App() {
         }
         return;
       }
+      let value: any;
       try {
-        const value = JSON.parse(result.value);
-        if (foreground) setMessage("");
-        done(value);
+        value = JSON.parse(result.value);
       } catch {
         setMessage("Invalid server response.");
         failed?.();
+        return;
       }
+      if (foreground) setMessage("");
+      done(value);
     });
     if (!id) {
       if (foreground) setBusy(false);

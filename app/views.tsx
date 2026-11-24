@@ -2,7 +2,6 @@ import { For, Show } from "solid-js";
 import { View, Text } from "@pocketjs/framework/components";
 import { type Item, type Page, type Quality, type StreamProfile, time } from "./protocol.ts";
 import { progressWidth } from "./stream.ts";
-import { UI } from "./ui.ts";
 
 export function label(value: string, max = 40) {
   return value.length > max ? `${value.slice(0, max - 3)}...` : value;
@@ -45,8 +44,12 @@ export function SetupView(props: {
         <Text class="absolute left-[8] top-[19] text-xs text-[#f1f5f9]">{props.passwordLabel}</Text>
       </View>
       <View class={props.authenticated
-        ? `absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center ${props.setupField === 3 ? UI.btnPrimaryFocused : UI.btnPrimary}`
-        : `absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center ${props.setupField === 3 ? UI.btnPrimaryFocused : UI.btnPrimary}`}>
+        ? props.setupField === 3
+          ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-[#5f2d8f] border-2 border-[#d8b4fe] rounded-lg"
+          : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-[#4c2473] border border-[#a855f7] rounded-lg"
+        : props.setupField === 3
+          ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-[#5f2d8f] border-2 border-[#d8b4fe] rounded-lg"
+          : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-[#4c2473] border border-[#a855f7] rounded-lg"}>
         <Text class="text-sm text-[#f1f5f9] font-bold">Sign in [A]</Text>
       </View>
       <Show when={props.authenticated}>
@@ -64,7 +67,7 @@ export function SetupView(props: {
 export function NavBar(props: { mode: string; inSetup?: boolean }) {
   const tab = (active: boolean, labelText: string) => (
     <View class="w-[80] h-full items-center justify-center relative">
-      <Text class={active ? `text-xs ${UI.textAccent} font-bold` : `text-xs ${UI.textSecondary} font-bold`}>{labelText}</Text>
+      <Text class={active ? "text-xs text-[#d8b4fe] font-bold" : "text-xs text-[#cbd5e1] font-bold"}>{labelText}</Text>
       <Show when={active}>
         <View class="absolute left-[10] right-[10] bottom-0 h-[2] bg-[#c084fc]" />
       </Show>
