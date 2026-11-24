@@ -54,6 +54,7 @@ int main(void) {
     const uint8_t corrupt[]={0xff,0xff,0xff,0xff,0x65};
     assert(!mvd_decode_packet(&ctx,corrupt,sizeof corrupt)); assert(calls==prior);
     /* Leading-zero padded Annex B packet + MVD_STATUS_BUSY retry */
+    slice_status = MVD_STATUS_FRAMEREADY;
     busy_renders = 2;
     const uint8_t padded[]={0,0,0,0,1,0x65,0xcc};
     assert(mvd_decode_packet(&ctx,padded,sizeof padded));
