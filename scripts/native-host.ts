@@ -204,7 +204,8 @@ export function transformMakefile(source: string): string {
 }
 
 export function transformRsf(source: string): string {
-  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 13\n  CpuSpeed: 804MHz\n  EnableL2Cache: true", "CIA revision");
+  source = replaceOne(source, "  SystemModeExt                 : 124MB", "  SystemModeExt                 : 124MB\n  CpuSpeed                      : 804MHz\n  EnableL2Cache                 : true", "New 3DS speedup");
+  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 13", "CIA revision");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  # APT captures framebuffers on the CPU before opening the OS keyboard.\n  MemoryMapping:\n   - 1f000000-1f5fffff:r\n  InterruptNumbers:", "DSP RAM mapping");
 }

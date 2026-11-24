@@ -407,7 +407,8 @@ function App() {
   function cycleTab(dir: 1 | -1) {
     if (busy() || screen() !== "browser" || controls() || detail()) return;
     const tabs: ("libraries" | "resume" | "search" | "setup")[] = ["libraries", "resume", "search", "setup"];
-    const cur = where().mode === "folder" ? "libraries" : where().mode;
+    const mode = where().mode;
+    const cur = mode === "folder" ? "libraries" : mode;
     const next = tabs[(tabs.indexOf(cur) + dir + tabs.length) % tabs.length];
     if (next === "libraries") home("libraries");
     else if (next === "resume") home("resume");
