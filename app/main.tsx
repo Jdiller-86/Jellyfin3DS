@@ -748,7 +748,7 @@ function App() {
   };
 
   return <>
-    <View class={`relative w-full h-full ${UI.canvas} overflow-hidden`}>
+    <View class="relative w-full h-full bg-[#0f131b] overflow-hidden">
       <Show when={playing()}><View class="absolute inset-0 bg-black" /></Show>
       <Image
         nodeRef={(node) => { plane = node; getOps().setImage(node.id, player.texture()); }}
@@ -757,36 +757,36 @@ function App() {
           height: videoRect().h, opacity: playing() && (status()?.presentedFrames ?? 0) > 0 ? 1 : 0 }}
       />
       <Show when={!playing() && screen() === "setup"}>
-        <View class={`absolute left-[12] top-[12] right-[12] bottom-[18] ${UI.card}`}>
-          <Text class={`absolute left-[14] top-[14] text-sm ${UI.textAccent} font-bold`}>Jellyfin3DS</Text>
-          <Text class={`absolute right-[14] top-[14] text-xs ${UI.textMuted}`}>{newModel() ? "New 3DS · 804 MHz" : "Nintendo 3DS"}</Text>
-          <Text class={`absolute left-[14] top-[42] text-lg ${UI.textPrimary} font-bold`}>Account</Text>
+        <View class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-[#161c28] border border-[#2a3448]">
+          <Text class="absolute left-[14] top-[14] text-sm text-[#d8b4fe] font-bold">Jellyfin3DS</Text>
+          <Text class="absolute right-[14] top-[14] text-xs text-[#94a3b8]">{newModel() ? "New 3DS · 804 MHz" : "Nintendo 3DS"}</Text>
+          <Text class="absolute left-[14] top-[42] text-lg text-[#f1f5f9] font-bold">Account</Text>
           <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#a855f7]" />
-          <Text class={`absolute left-[14] top-[94] text-base ${UI.textSecondary}`}>Sign in below to connect to your Jellyfin server.</Text>
-          <Text class={`absolute left-[14] bottom-[16] text-xs ${UI.textMuted}`}>
+          <Text class="absolute left-[14] top-[94] text-base text-[#cbd5e1]">Sign in below to connect to your Jellyfin server.</Text>
+          <Text class="absolute left-[14] bottom-[16] text-xs text-[#94a3b8]">
             {server().startsWith("https://") ? "TLS certificate verification enabled" : "LAN HTTP mode"}
           </Text>
         </View>
       </Show>
       <Show when={!playing() && screen() === "browser"}>
-        <View class={`absolute left-[12] top-[8] right-[12] bottom-[10] ${UI.card}`}>
+        <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-[#161c28] border border-[#2a3448]">
           <View class="absolute left-[10] top-[10] w-[178] h-[100] rounded-lg bg-[#1f283a] overflow-hidden items-center justify-center">
-            <Text class={`text-xs ${UI.textMuted}`}>{art() ? "" : artError() || selected()?.type || "Library"}</Text>
+            <Text class="text-xs text-[#94a3b8]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
             <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
               class="absolute top-0" style={{insetL:0,width:178,height:178,opacity:art()?1:0}} />
           </View>
-          <Text class={`absolute left-[198] right-[10] top-[12] text-sm ${UI.textPrimary} font-bold`}>{label(selected()?.name ?? "Library", 28)}</Text>
-          <Text class={`absolute left-[198] right-[10] top-[52] text-xs ${UI.textAccent}`}>{subtitle().slice(0, 60)}</Text>
-          <Text class={`absolute left-[198] right-[10] top-[88] text-xs ${UI.textMuted}`}>{selected()?.played ? "Watched" : selected()?.resume ? `Resume ${time(selected()!.resume)}` : selected()?.type ?? ""}</Text>
+          <Text class="absolute left-[198] right-[10] top-[12] text-sm text-[#f1f5f9] font-bold">{label(selected()?.name ?? "Library", 28)}</Text>
+          <Text class="absolute left-[198] right-[10] top-[52] text-xs text-[#d8b4fe]">{subtitle().slice(0, 60)}</Text>
+          <Text class="absolute left-[198] right-[10] top-[88] text-xs text-[#94a3b8]">{selected()?.played ? "Watched" : selected()?.resume ? `Resume ${time(selected()!.resume)}` : selected()?.type ?? ""}</Text>
           <View class="absolute left-[10] right-[10] top-[118] h-[1] bg-[#2a3448]" />
-          <Text class={`absolute left-[10] right-[10] top-[125] text-xs ${UI.textSecondary}`}>{overview().length > 210 ? overview().slice(0, 207) + "..." : overview()}</Text>
+          <Text class="absolute left-[10] right-[10] top-[125] text-xs text-[#cbd5e1]">{overview().length > 210 ? overview().slice(0, 207) + "..." : overview()}</Text>
         </View>
       </Show>
       <Show when={screen() === "boot"}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-2">
-          <Text class={`text-lg ${UI.textPrimary} font-bold`}>Jellyfin3DS</Text>
+          <Text class="text-lg text-[#f1f5f9] font-bold">Jellyfin3DS</Text>
           <View class="w-[64] h-[48] rounded-xl bg-[#a855f7] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
-          <Text class={`text-xs ${UI.textMuted}`}>Starting…</Text>
+          <Text class="text-xs text-[#94a3b8]">Starting…</Text>
         </View>
       </Show>
       <Show when={message() && message() !== "Loading…" && (!playing() || status()?.phase === "error")}>
@@ -794,16 +794,16 @@ function App() {
       </Show>
       <Show when={playing() && !(status()?.presentedFrames)}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-1">
-          <Text class={`text-sm ${UI.textAccent} font-bold`}>{label(playing()?.name ?? "")}</Text>
-          <Text class={`text-base ${UI.textPrimary}`}>{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text>
+          <Text class="text-sm text-[#d8b4fe] font-bold">{label(playing()?.name ?? "")}</Text>
+          <Text class="text-base text-[#f1f5f9]">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text>
           <Show when={profile()}>
-            <Text class={`text-xs ${UI.textAccent}`}>{profile()!.maxWidth}×{profile()!.maxHeight} · {profile()!.maxFps} fps · {profile()!.hardware ? "MVD" : "CPU"}</Text>
+            <Text class="text-xs text-[#d8b4fe]">{profile()!.maxWidth}×{profile()!.maxHeight} · {profile()!.maxFps} fps · {profile()!.hardware ? "MVD" : "CPU"}</Text>
           </Show>
         </View>
       </Show>
     </View>
 
-    <AuxiliarySurface>{() => <View class={`relative w-full h-full ${controls() ? UI.playerCanvas : UI.canvas} overflow-hidden`}>
+    <AuxiliarySurface>{() => <View class={controls() ? "relative w-full h-full bg-[#0b0e14] overflow-hidden" : "relative w-full h-full bg-[#0f131b] overflow-hidden"}>
       <Show when={screen() === "setup"}>
         <SetupView
           setupField={setupField()}
@@ -861,7 +861,7 @@ function App() {
             hasNext={Boolean(nextItem())}
           />
         </Show>
-        <Text class={`absolute left-[6] top-[223] text-xs ${UI.textMuted}`}>
+        <Text class="absolute left-[6] top-[223] text-xs text-[#94a3b8]">
           {label(message() || (controls() ? streamInfo() ? "Up/Down: Select · A/L/R: Change · B: Back" : "A: Play/Pause · L/R: ±30s · Up/Down: Vol · X: Stream" : "A: Open · L/R: Tabs · X: Search · Y: Continue"), 48)}
         </Text>
       </Show>
