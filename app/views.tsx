@@ -126,7 +126,7 @@ export function BrowserListView(props: {
       <View class={props.playing ? "absolute left-[6] right-[6] top-[192] h-[28] flex-row justify-around items-center bg-[#4c2473] border border-[#a855f7] rounded-lg" : "absolute left-[6] right-[6] top-[192] h-[28] flex-row justify-around items-center bg-[#1a2232] border border-[#2e3a52] rounded-lg"}>
         <Text class="text-xs text-[#cbd5e1]">Back [B]</Text>
         <View class="w-[1] h-[16] bg-[#2e3a52]" />
-        <Text class={`text-xs ${props.playing ? `${UI.textAccent} font-bold` : UI.textMuted}`}>
+        <Text class={props.playing ? "text-xs text-[#d8b4fe] font-bold" : "text-xs text-[#94a3b8]"}>
           {props.playing ? "Now playing [SELECT]" : `${props.page.total} items · X: Search`}
         </Text>
       </View>
