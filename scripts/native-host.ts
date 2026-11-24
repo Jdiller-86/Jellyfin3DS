@@ -143,7 +143,7 @@ export function transformVideoSource(source: string): string {
     "MVD init fallback");
   source = replaceOne(source,
     `                int dst_row = 0, y_count = 0;\n                for (int y = 0; y < f->height; y++) {\n                    const u8 *row = f->data + y * f->width * 2;\n                    tile_row_morton(tex_data, dst_row, row, f->width);\n                    dst_row += s_inc_y[y_count++];\n                }`,
-    `                /* ${MARKER}: hardware GX DMA flips and Morton-tiles on the GPU; CPU fallback for unaligned dims. */\n                if ((f->width & 7) == 0 && (f->height & 7) == 0) {\n                    GSPGPU_FlushDataCache(f->data, (size_t)f->width * f->height * 2);\n                    C3D_SyncDisplayTransfer(\n                        (u32 *)f->data, GX_BUFFER_DIM(f->width, f->height),\n                        (u32 *)tex_data, GX_BUFFER_DIM(s_vp.frame_tex[write_idx].width, s_vp.frame_tex[write_idx].height),\n                        GX_TRANSFER_FLIP_VERT(1) | GX_TRANSFER_OUT_TILED(1) |\n                        GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGB565) |\n                        GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB565));\n                } else {\n                    int dst_row = 0, y_count = 0;\n                    int padding = s_vp.frame_tex[write_idx].height - f->height;\n                    for (int y = 0; y < padding; y++)\n                        dst_row += s_inc_y[y_count++];\n                    for (int y = 0; y < f->height; y++) {\n                        const u8 *row = f->data + (f->height - 1 - y) * f->width * 2;\n                        tile_row_morton(tex_data, dst_row, row, f->width);\n                        dst_row += s_inc_y[y_count++];\n                    }\n                }`,
+    `                /* ${MARKER}: PocketJS samples v=0 from the high texture rows. */\n                int dst_row = 0, y_count = 0;\n                int padding = s_vp.frame_tex[write_idx].height - f->height;\n                for (int y = 0; y < padding; y++)\n                    dst_row += s_inc_y[y_count++];\n                for (int y = 0; y < f->height; y++) {\n                    const u8 *row = f->data + (f->height - 1 - y) * f->width * 2;\n                    tile_row_morton(tex_data, dst_row, row, f->width);\n                    dst_row += s_inc_y[y_count++];\n                }`,
     "video orientation",
   );
   return `${source}\n\n/* ${MARKER}: PocketJS binds this texture in its own PICA draw list. */\nstatic bool at_frame_boundary;\nbool video_player_present(void) {\n    at_frame_boundary = true;\n    bool ready = video_player_texture(NULL, NULL) != NULL;\n    at_frame_boundary = false;\n    return ready;\n}\nC3D_Tex *video_player_texture(float *u_scale, float *v_scale)\n{\n    if (s_vp.state != VIDEO_PLAYING && s_vp.state != VIDEO_PAUSED) return NULL;\n    if (!s_vp.tex_initialized && s_vp.display_width > 0)\n        init_frame_texture(s_vp.display_width, s_vp.display_height);\n    LightLock_Lock(&s_vp.tex_lock);\n    if (at_frame_boundary && s_vp.new_tex_ready) {\n        s_vp.frame_img.tex = &s_vp.frame_tex[s_vp.tex_display_idx];\n        s_vp.frame_img.subtex = &s_subtex;\n        s_vp.new_tex_ready = false;\n        s_vp.frames_displayed++;\n        LightEvent_Signal(&s_vp.tex_consumed);\n    }\n    C3D_Tex *texture = s_vp.tex_initialized ? s_vp.frame_img.tex : NULL;\n    if (texture) {\n        if (u_scale) *u_scale = (float)s_vp.display_width / (float)texture->width;\n        if (v_scale) *v_scale = (float)s_vp.display_height / (float)texture->height;\n    }\n    LightLock_Unlock(&s_vp.tex_lock);\n    return texture;\n}\n`;
@@ -154,7 +154,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.5\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.6\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -197,7 +197,7 @@ export function transformMakefile(source: string): string {
   source = source.replace("$(RSF) $(CIA_STAMP)\n", "$(RSF) $(CIA_STAMP) /out/.pocket/banner/banner.bnr\n");
   // Update both the metadata recipe and its cache stamp.
   if(source.split('"$$POCKETJS_SMDH_DESC"').length !== 3) throw new Error("SMDH description seam changed");
-  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.5"');
+  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.6"');
   // FFmpeg is built with 32-bit enums. Its public structs must use the same ABI.
   source += "\n$(BUILD)/video_player.o $(BUILD)/ffmpeg_demux.o: CFLAGS += -fno-short-enums\n";
   return source;
@@ -205,7 +205,7 @@ export function transformMakefile(source: string): string {
 
 export function transformRsf(source: string): string {
   source = replaceOne(source, "  SystemModeExt                 : 124MB", "  SystemModeExt                 : 124MB\n  CpuSpeed                      : 804MHz\n  EnableL2Cache                 : true", "New 3DS speedup");
-  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 13", "CIA revision");
+  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 14", "CIA revision");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  # APT captures framebuffers on the CPU before opening the OS keyboard.\n  MemoryMapping:\n   - 1f000000-1f5fffff:r\n  InterruptNumbers:", "DSP RAM mapping");
 }

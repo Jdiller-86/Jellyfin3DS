@@ -33,12 +33,12 @@ import hashlib
 assert hashlib.sha256(entries.get('logo', b'')).hexdigest() == \
     '62a5a1f9091aefb46b52e31fbeca2fdba9a99fe2473237e21e35b8d2e5659dff', \
     'Launch logo differs from the authenticated working baseline'
-assert struct.unpack_from('<H', exheader, 0xE)[0] == 13, 'CIA revision missing'
+assert struct.unpack_from('<H', exheader, 0xE)[0] == 14, 'CIA revision missing'
 icon = entries.get('icon', b'')
 assert icon[:4] == b'SMDH', 'HOME Menu icon missing'
 title = icon[0x208:0x288].decode('utf-16le').split('\0')[0]
 assert title == 'Jellyfin3DS', f'Unexpected HOME Menu title: {title!r}'
-assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.3.5'
+assert icon[0x288:0x388].decode('utf-16le').split('\0')[0] == 'Jellyfin client v0.3.6'
 # SMDH stores tiled RGB565 pixels; histogram checks are independent of tiling.
 for offset, pixels in ((0x2040, 24*24), (0x24C0, 48*48)):
     colors = struct.unpack_from('<' + str(pixels) + 'H', icon, offset)

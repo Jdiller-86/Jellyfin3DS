@@ -32,6 +32,7 @@ test("native decoder keeps authentication in a header and verifies TLS", () => {
   expect(source).toContain("CURLOPT_XFERINFOFUNCTION, jellyfin3ds_net_progress");
   expect(source).toContain("CURLOPT_CONNECTTIMEOUT, 10L");
   expect(source).toContain("video_player_texture");
+  expect(source).not.toContain("C3D_SyncDisplayTransfer");
   expect(source).toContain("s_vp.new_tex_ready = false;\n        s_vp.frames_displayed++;");
   expect(source).not.toContain("s_vp.new_tex_ready = true;\n            s_vp.frames_displayed++;");
 });

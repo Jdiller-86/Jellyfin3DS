@@ -15,6 +15,10 @@ All notable changes to **Jellyfin3DS** are documented in this file.
 - Removed unused write-only tracking fields (`PreparedStream.generation`, `offload_measure` counters).
 - Added native C unit tests for `native/offload_util.h` (`test/offload_util.c`) and `j3ds_yuv420p_to_rgb565` (`test/rgb565.c`).
 
+## [0.3.6] - 2026-11-24
+
+- **MVD Hardware Decode Crash Fix:** Removed worker-thread `C3D_SyncDisplayTransfer` from `convert_thread_func` (Citro3D GX queue is main-thread-only and `GX_DisplayTransfer` cannot tile `400×240` into `512×256`), restoring safe `tile_row_morton` tiling for hardware MVD playback.
+
 ## [0.3.5] - 2026-11-23
 
 - **New 3DS Hardware & 30 fps Pipeline:** Enabled `osSetSpeedupEnable(true)` (804 MHz + L2 cache) and RSF `CpuSpeed: 804MHz` / `EnableL2Cache: true`; replaced CPU Morton tiling with hardware `C3D_SyncDisplayTransfer` DMA and `LightEvent` frame handoff.
