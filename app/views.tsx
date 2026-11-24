@@ -230,7 +230,7 @@ export function PlayerControlsView(props: {
 
       <Show when={props.streamInfo}>
         <View class="absolute left-0 top-0 w-full h-[32] px-[12] flex-row items-center justify-between bg-[#151b26] border border-[#283246]">
-          <Text class="text-sm text-[#f1f5f9] font-bold">Stream &amp; Decoder</Text>
+          <Text class="text-sm text-[#f1f5f9] font-bold">Stream / Decoder</Text>
           <Text class="text-xs text-[#d8b4fe] font-bold">Back [B]</Text>
         </View>
         <View class="absolute left-[8] right-[8] top-[40] h-[54] px-[10] justify-center rounded-xl bg-[#161c28] border border-[#2a3448]">
