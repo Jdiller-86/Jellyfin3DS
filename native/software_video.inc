@@ -45,8 +45,8 @@ static void software_decode_thread(void)
     if (!decoder || avcodec_parameters_to_context(decoder, stream->codecpar) < 0) {
         error = "Could not prepare the software decoder"; goto done;
     }
-    decoder->thread_count = 1;
-    decoder->thread_type = 0;
+    decoder->thread_count = direct_media_is_new_model() ? 2 : 1;
+    decoder->thread_type = direct_media_is_new_model() ? FF_THREAD_SLICE : 0;
     if (avcodec_open2(decoder, codec, NULL) < 0) {
         error = "Could not open the software decoder"; goto done;
     }
@@ -68,6 +68,10 @@ static void software_decode_thread(void)
         if (!video) decode_audio_packet(packet);
         else {
             int result = avcodec_send_packet(decoder, packet);
+            if (result == AVERROR_INVALIDDATA || result == AVERROR(EAGAIN)) {
+                av_packet_unref(packet);
+                continue;
+            }
             if (result < 0) { error = "Software video decode failed"; break; }
             while ((result = avcodec_receive_frame(decoder, frame)) >= 0) {
                 if (!software_frame(frame, pixels, width, height)) {
@@ -80,7 +84,8 @@ static void software_decode_thread(void)
                 ++s_vp.frames_decoded;
                 av_frame_unref(frame);
             }
-            if (result != AVERROR(EAGAIN) && result != AVERROR_EOF && result < 0)
+            if (result != AVERROR(EAGAIN) && result != AVERROR_EOF &&
+                result != AVERROR_INVALIDDATA && result < 0)
                 error = "Software video decode failed";
         }
         av_packet_unref(packet);

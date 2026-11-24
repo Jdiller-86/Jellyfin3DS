@@ -2,9 +2,15 @@ import { For, Show } from "solid-js";
 import { View, Text } from "@pocketjs/framework/components";
 import { type Item, type Page, type Quality, type StreamProfile, time } from "./protocol.ts";
 import { progressWidth } from "./stream.ts";
+import { UI } from "./ui.ts";
 
-export function label(value: string) {
-  return value.length > 40 ? `${value.slice(0, 37)}...` : value;
+export function label(value: string, max = 40) {
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value;
+}
+
+function phaseLabel(phase: string): string {
+  if (!phase) return "Opening";
+  return phase.charAt(0).toUpperCase() + phase.slice(1);
 }
 
 export function SetupView(props: {
@@ -17,42 +23,39 @@ export function SetupView(props: {
 }) {
   return (
     <>
-      <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]">
-        <Text class="text-sm text-[#3c4954] font-bold">Account · v0.3.4</Text>
+      <View class={`absolute left-0 top-0 w-full h-[32] items-center justify-center ${UI.headerBar}`}>
+        <Text class={`text-sm ${UI.textPrimary} font-bold`}>Account · v0.3.5</Text>
+        <View class="absolute left-0 right-0 bottom-0 h-[2] bg-[#a855f7]" />
       </View>
-      <View class={props.setupField === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-        <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Server URL</Text>
+      <View class={`absolute left-[8] right-[8] top-[43] h-[39] ${props.setupField === 0 ? UI.btnFocused : UI.btnDefault}`}>
+        <Text class={`absolute left-[8] top-[4] text-xs ${UI.textMuted}`}>Server URL</Text>
         <Show when={props.server.startsWith("https://") || props.server.startsWith("http://")}>
-          <Text class={props.server.startsWith("https://") ? "absolute right-[8] top-[4] text-xs text-[#2e7d32] font-bold" : "absolute right-[8] top-[4] text-xs text-[#9a6700]"}>
+          <Text class={props.server.startsWith("https://") ? "absolute right-[8] top-[4] text-xs text-[#86efac] font-bold" : "absolute right-[8] top-[4] text-xs text-[#fcd34d] font-bold"}>
             {props.server.startsWith("https://") ? "HTTPS" : "HTTP"}
           </Text>
         </Show>
-        <Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{label(props.server)}</Text>
+        <Text class={`absolute left-[8] top-[19] text-xs ${UI.textPrimary}`}>{label(props.server)}</Text>
       </View>
-      <View class={props.setupField === 1 ? "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[86] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-        <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Username</Text>
-        <Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{props.username || "Enter username"}</Text>
+      <View class={`absolute left-[8] right-[8] top-[86] h-[39] ${props.setupField === 1 ? UI.btnFocused : UI.btnDefault}`}>
+        <Text class={`absolute left-[8] top-[4] text-xs ${UI.textMuted}`}>Username</Text>
+        <Text class={`absolute left-[8] top-[19] text-xs ${UI.textPrimary}`}>{props.username || "Enter username"}</Text>
       </View>
-      <View class={props.setupField === 2 ? "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[8] right-[8] top-[129] h-[39] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-        <Text class="absolute left-[8] top-[4] text-xs text-[#6a7680]">Password</Text>
-        <Text class="absolute left-[8] top-[19] text-xs text-[#3c4954]">{props.passwordLabel}</Text>
+      <View class={`absolute left-[8] right-[8] top-[129] h-[39] ${props.setupField === 2 ? UI.btnFocused : UI.btnDefault}`}>
+        <Text class={`absolute left-[8] top-[4] text-xs ${UI.textMuted}`}>Password</Text>
+        <Text class={`absolute left-[8] top-[19] text-xs ${UI.textPrimary}`}>{props.passwordLabel}</Text>
       </View>
       <View class={props.authenticated
-        ? props.setupField === 3
-          ? "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
-          : "absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"
-        : props.setupField === 3
-          ? "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg"
-          : "absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}>
-        <Text class="text-sm text-[#3c4954] font-bold">Sign in [A]</Text>
+        ? `absolute left-[8] w-[144] top-[176] h-[40] items-center justify-center ${props.setupField === 3 ? UI.btnPrimaryFocused : UI.btnPrimary}`
+        : `absolute left-[8] right-[8] top-[176] h-[40] items-center justify-center ${props.setupField === 3 ? UI.btnPrimaryFocused : UI.btnPrimary}`}>
+        <Text class={`text-sm ${UI.textPrimary} font-bold`}>Sign in [A]</Text>
       </View>
       <Show when={props.authenticated}>
-        <View class={props.setupField === 4 ? "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-[#fff1f1] to-[#f3d2d2] border-2 border-[#cf5a5a] rounded-lg" : "absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="text-sm text-[#704040]">Sign out</Text>
+        <View class={`absolute right-[8] w-[144] top-[176] h-[40] items-center justify-center ${props.setupField === 4 ? UI.btnDangerFocused : UI.btnDanger}`}>
+          <Text class="text-sm text-[#fecaca] font-bold">Sign out</Text>
         </View>
       </Show>
-      <Text class="absolute left-[8] top-[222] text-xs text-[#6a7680]">
-        {props.authenticated ? "B: Back" : props.providerReady ? "A: Edit" : "Starting…"}
+      <Text class={`absolute left-[8] top-[222] text-xs ${UI.textMuted}`}>
+        {props.authenticated ? "A: Edit/Confirm · B: Back" : props.providerReady ? "A: Edit · START: Submit" : "Starting…"}
       </Text>
     </>
   );
@@ -61,14 +64,14 @@ export function SetupView(props: {
 export function NavBar(props: { mode: string; inSetup?: boolean }) {
   const tab = (active: boolean, labelText: string) => (
     <View class="w-[80] h-full items-center justify-center relative">
-      <Text class={active ? "text-xs text-[#75409b] font-bold" : "text-xs text-[#3c4954] font-bold"}>{labelText}</Text>
+      <Text class={active ? `text-xs ${UI.textAccent} font-bold` : `text-xs ${UI.textSecondary} font-bold`}>{labelText}</Text>
       <Show when={active}>
-        <View class="absolute left-[10] right-[10] bottom-0 h-[2] bg-[#aa5cc3]" />
+        <View class="absolute left-[10] right-[10] bottom-0 h-[2] bg-[#c084fc]" />
       </Show>
     </View>
   );
   return (
-    <View class="absolute left-0 top-0 w-full h-[32] flex-row items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca]">
+    <View class={`absolute left-0 top-0 w-full h-[32] flex-row items-center ${UI.headerBar}`}>
       {tab(!props.inSetup && (props.mode === "libraries" || props.mode === "folder"), "Libraries")}
       {tab(!props.inSetup && props.mode === "resume", "Continue")}
       {tab(!props.inSetup && props.mode === "search", "Search")}
@@ -89,38 +92,43 @@ export function BrowserListView(props: {
   fetchingMore: boolean;
   playing: boolean;
 }) {
+  const thumbTop = () => Math.min(176, Math.max(48, 48 + 128 * (props.page.offset + props.index) / Math.max(1, props.page.total - 1)));
+  const firstRow = () => Math.floor(props.scrollY / props.rowHeight);
   return (
     <>
-      <Text class="absolute left-[8] top-[33] text-xs text-[#6a7680]">{label(props.title)}</Text>
+      <Text class={`absolute left-[8] top-[34] text-xs ${UI.textMuted}`}>{label(props.title, 34)}</Text>
       <Show when={props.page.total > 0}>
-        <Text class="absolute right-[8] top-[33] text-xs text-[#8c9ba6]">{props.page.offset + props.index + 1}/{props.page.total}</Text>
+        <Text class={`absolute right-[8] top-[34] text-xs ${UI.textAccent}`}>{props.page.offset + props.index + 1}/{props.page.total}</Text>
       </Show>
-      <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#dde5eb]" />
-      <View class="absolute right-[1] w-[3] h-[12] bg-[#aa5cc3]" style={{ insetT: 48 + 128 * (props.page.offset + props.index) / Math.max(1, props.page.total - 1) }} />
+      <View class="absolute right-[1] top-[48] w-[3] h-[140] bg-[#1e2636]" />
+      <View class="absolute right-[1] w-[3] h-[12] bg-[#a855f7]" style={{ insetT: thumbTop() }} />
       <View class="absolute left-0 right-[4] top-[48] h-[140] overflow-hidden">
-        <For each={props.visibleRows}>{item =>
-          <View style={{ insetT: props.page.items.indexOf(item) * props.rowHeight - props.scrollY }} class={item === props.page.items[props.index] ? "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border-2 border-[#aa5cc3] rounded-lg overflow-hidden" : "absolute left-[6] right-[6] h-[27] bg-gradient-to-b from-white to-[#f0f1f3] border border-[#c4cbd1] rounded-lg overflow-hidden"}>
-            <Text class="absolute left-[6] top-[5] text-xs text-[#3c4954]">{item.folder ? "> " : item.played ? "✓ " : "  "}{label(item.name)}</Text>
-            <Show when={item.resume > 0 && item.seconds > 0}>
-              <View class="absolute left-[4] bottom-0 h-[2] bg-[#aa5cc3]" style={{ width: Math.min(288, 288 * item.resume / item.seconds) }} />
-            </Show>
-          </View>
-        }</For>
+        <For each={props.visibleRows}>{(item, i) => {
+          const rowIdx = () => firstRow() + i();
+          return (
+            <View style={{ insetT: rowIdx() * props.rowHeight - props.scrollY }} class={`absolute left-[6] right-[6] h-[27] overflow-hidden ${rowIdx() === props.index ? UI.rowFocused : UI.rowDefault}`}>
+              <Text class={`absolute left-[6] top-[5] text-xs ${UI.textPrimary}`}>{item.folder ? "▸ " : item.played ? "✓ " : "  "}{label(item.name, 36)}</Text>
+              <Show when={item.resume > 0 && item.seconds > 0}>
+                <View class="absolute left-[4] bottom-0 h-[2] bg-[#a855f7]" style={{ width: Math.min(288, 288 * item.resume / item.seconds) }} />
+              </Show>
+            </View>
+          );
+        }}</For>
       </View>
       <Show when={!props.page.items.length}>
-        <Text class="absolute left-[16] top-[91] text-sm text-[#6a7680]">{props.busy ? "Loading…" : props.mode === "search" ? "No results" : "No items"}</Text>
+        <Text class={`absolute left-[16] top-[91] text-sm ${UI.textMuted}`}>{props.busy ? "Loading…" : props.mode === "search" ? "No results" : "No items"}</Text>
       </Show>
       <Show when={props.fetchingMore}>
-        <View class="absolute left-[120] top-[168] w-[80] h-[20] rounded-lg bg-white border border-[#c4cbd1] items-center justify-center">
-          <Text class="text-xs text-[#75409b]">Loading…</Text>
+        <View class={`absolute left-[120] top-[168] w-[80] h-[20] items-center justify-center ${UI.btnFocused}`}>
+          <Text class={`text-xs ${UI.textAccent}`}>Loading…</Text>
         </View>
       </Show>
-      <View class="absolute left-[6] right-[6] top-[192] h-[28] bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] flex-row justify-around items-center rounded-lg">
-        <Text class="text-xs text-[#3c4954]">Back [B]</Text>
-        <Show when={props.playing}>
-          <View class="w-[1] h-[16] bg-[#c4cbd1]" />
-        </Show>
-        <Text class="text-xs text-[#75409b]">{props.playing ? "Now playing [SELECT]" : `${props.page.total} items`}</Text>
+      <View class={`absolute left-[6] right-[6] top-[192] h-[28] flex-row justify-around items-center ${props.playing ? UI.btnPrimary : UI.btnDefault}`}>
+        <Text class={`text-xs ${UI.textSecondary}`}>Back [B]</Text>
+        <View class="w-[1] h-[16] bg-[#2e3a52]" />
+        <Text class={`text-xs ${props.playing ? `${UI.textAccent} font-bold` : UI.textMuted}`}>
+          {props.playing ? "Now playing [SELECT]" : `${props.page.total} items · X: Search`}
+        </Text>
       </View>
     </>
   );
@@ -134,29 +142,32 @@ export function DetailView(props: {
 }) {
   return (
     <>
-      <Text class="absolute left-[10] top-[43] text-xs text-[#3c4954]">{label(props.item.name)}</Text>
-      <View class={props.detailFocus === 0 ? "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}>
-        <Text class="text-sm text-[#3c4954]">{props.item.resume ? `Resume ${time(props.item.resume)} [A]` : "Play [A]"}</Text>
+      <Text class={`absolute left-[10] top-[40] text-sm ${UI.textPrimary} font-bold`}>{label(props.item.name, 34)}</Text>
+      <Text class={`absolute left-[10] top-[57] text-xs ${UI.textMuted}`}>
+        {props.item.seconds > 0 ? `${Math.round(props.item.seconds / 60)} min` : props.item.type}{props.item.year ? ` · ${props.item.year}` : ""}
+      </Text>
+      <View class={`absolute left-[10] right-[10] top-[76] h-[40] items-center justify-center ${props.detailFocus === 0 ? UI.btnPrimaryFocused : UI.btnPrimary}`}>
+        <Text class={`text-sm ${UI.textPrimary} font-bold`}>{props.item.resume ? `Resume ${time(props.item.resume)} [A]` : "Play [A]"}</Text>
       </View>
       <Show when={props.item.resume > 0}>
-        <View class={props.detailFocus === 1 ? "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="text-sm text-[#3c4954]">Start over</Text>
+        <View class={`absolute left-[10] right-[10] top-[122] h-[40] items-center justify-center ${props.detailFocus === 1 ? UI.btnFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary}`}>Start over</Text>
         </View>
       </Show>
       <Show when={!props.item.resume}>
-        <Text class="absolute left-[12] right-[12] top-[121] text-xs text-[#6a7680]">{props.overview.slice(0, 145)}</Text>
+        <Text class={`absolute left-[12] right-[12] top-[124] text-xs ${UI.textSecondary}`}>{props.overview.slice(0, 145)}</Text>
       </Show>
       <Show when={!props.playing}>
-        <View class={props.detailFocus === 2 ? "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="text-sm text-[#3c4954]">Back [B]</Text>
+        <View class={`absolute left-[10] right-[10] top-[170] h-[40] items-center justify-center ${props.detailFocus === 2 ? UI.btnFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary}`}>Back [B]</Text>
         </View>
       </Show>
       <Show when={props.playing}>
-        <View class={props.detailFocus === 2 ? "absolute left-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#aa5cc3] rounded-lg" : "absolute left-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}>
-          <Text class="text-sm text-[#3c4954]">Back [B]</Text>
+        <View class={`absolute left-[10] w-[146] top-[170] h-[40] items-center justify-center ${props.detailFocus === 2 ? UI.btnFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary}`}>Back [B]</Text>
         </View>
-        <View class="absolute right-[10] w-[146] top-[170] h-[40] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#e8d5f2] border border-[#9452b3] rounded-lg">
-          <Text class="text-sm text-[#75409b] font-bold">Now playing</Text>
+        <View class={`absolute right-[10] w-[146] top-[170] h-[40] items-center justify-center ${props.detailFocus === 3 ? UI.btnPrimaryFocused : UI.btnPrimary}`}>
+          <Text class={`text-sm ${UI.textAccent} font-bold`}>Now playing</Text>
         </View>
       </Show>
     </>
@@ -169,51 +180,83 @@ export function PlayerControlsView(props: {
   phase: string;
   videoSize: string;
   displayFps?: number;
+  decodeFps?: number;
   profile?: StreamProfile;
   playbackSeconds: number;
   durationSeconds: number;
-  controlFocus: number;
+  seeking?: boolean;
   infoFocus: number;
   quality: Quality;
+  hardwareDecode: boolean;
+  newModel: boolean;
   volume: number;
   hasNext?: boolean;
 }) {
   const primaryLabel = () => props.phase === "ended" ? (props.hasNext ? "Next" : "Replay") : props.phase === "paused" ? "Play" : "Pause";
+  const progress = () => progressWidth(props.playbackSeconds, props.durationSeconds);
   return (
     <>
       <Show when={!props.streamInfo}>
-        <Text class="absolute left-[12] top-[38] text-sm text-[#3c4954] font-bold">{label(props.title)}</Text>
-        <Text class="absolute left-[12] top-[59] text-xs text-[#75409b]">{props.phase} · {props.videoSize} · {props.profile?.hardware ? "MVD" : "CPU"}</Text>
-        <Text class="absolute left-[24] top-[79] text-xs text-[#3c4954]">{time(props.playbackSeconds)}</Text>
-        <Text class="absolute right-[24] top-[79] text-xs text-[#3c4954]">{time(props.durationSeconds)}</Text>
-        <View class="absolute left-[24] top-[104] w-[272] h-[6] rounded-lg bg-[#d6dce2]" />
-        <View class="absolute left-[24] top-[104] h-[6] rounded-lg bg-[#9452b3]" style={{ width: progressWidth(props.playbackSeconds, props.durationSeconds) }} />
-        <View class="absolute top-[98] w-[17] h-[18] rounded-lg bg-white border-2 border-[#9452b3]" style={{ insetL: Math.min(287, 16 + progressWidth(props.playbackSeconds, props.durationSeconds)) }} />
-        <View class="absolute left-[8] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">−10s</Text></View>
-        <View class={props.controlFocus === 0 ? "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[126] w-[100] h-[42] items-center justify-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border border-[#9452b3] rounded-lg"}><Text class="text-sm text-[#3c4954] font-bold">{primaryLabel()}</Text></View>
-        <View class="absolute left-[216] top-[126] w-[96] h-[42] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"><Text class="text-sm text-[#3c4954]">+10s</Text></View>
-        <View class={props.controlFocus === 1 ? "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stream</Text></View>
-        <View class={props.controlFocus === 2 ? "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[110] top-[177] w-[100] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Browse</Text></View>
-        <View class={props.controlFocus === 3 ? "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg" : "absolute left-[216] top-[177] w-[96] h-[40] items-center justify-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Stop</Text></View>
+        <View class={`absolute left-0 top-0 w-full h-[36] px-[10] flex-row items-center justify-between ${UI.headerBar}`}>
+          <Text class={`text-xs ${UI.textPrimary} font-bold`}>{label(props.title, 22)}</Text>
+          <Text class={`text-xs ${UI.textAccent} font-bold`}>
+            {phaseLabel(props.phase)}{props.displayFps ? ` · ${props.displayFps.toFixed(1)} fps` : ""} · {props.profile?.hardware ? "MVD" : "CPU"}
+          </Text>
+        </View>
+
+        <Text class={`absolute left-[16] top-[46] text-xs font-bold ${props.seeking ? UI.textCyan : UI.textPrimary}`}>{time(props.playbackSeconds)}</Text>
+        <Text class={`absolute right-[16] top-[46] text-xs ${UI.textMuted}`}>{time(props.durationSeconds)}</Text>
+        <View class="absolute left-[16] top-[72] w-[288] h-[8] rounded-lg bg-[#1e2636]" />
+        <View class="absolute left-[16] top-[72] h-[8] rounded-lg bg-[#a855f7]" style={{ width: progress() }} />
+        <View class="absolute top-[67] w-[18] h-[18] rounded-lg bg-[#f1f5f9] border-2 border-[#a855f7]" style={{ insetL: Math.min(294, 8 + progress()) }} />
+
+        <View class={`absolute left-[8] top-[98] w-[58] h-[46] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textSecondary} font-bold`}>−30s</Text></View>
+        <View class={`absolute left-[70] top-[98] w-[54] h-[46] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textPrimary} font-bold`}>−10s</Text></View>
+        <View class={`absolute left-[128] top-[98] w-[64] h-[46] items-center justify-center ${UI.btnPrimaryFocused}`}><Text class={`text-sm ${UI.textPrimary} font-bold`}>{primaryLabel()}</Text></View>
+        <View class={`absolute left-[196] top-[98] w-[54] h-[46] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textPrimary} font-bold`}>+10s</Text></View>
+        <View class={`absolute left-[254] top-[98] w-[58] h-[46] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textSecondary} font-bold`}>+30s</Text></View>
+
+        <View class={`absolute left-[8] right-[8] top-[150] h-[28] flex-row justify-around items-center overflow-hidden ${UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textSecondary} font-bold`}>−</Text>
+          <Text class={`text-xs ${UI.textAccent} font-bold`}>Volume {Math.round(props.volume * 100)}%</Text>
+          <Text class={`text-sm ${UI.textSecondary} font-bold`}>+</Text>
+          <View class="absolute left-[6] bottom-0 h-[2] bg-[#a855f7]" style={{ width: Math.round(292 * props.volume) }} />
+        </View>
+
+        <View class={`absolute left-[8] top-[184] w-[98] h-[34] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textPrimary} font-bold`}>Stream [X]</Text></View>
+        <View class={`absolute left-[111] top-[184] w-[98] h-[34] items-center justify-center ${UI.btnDefault}`}><Text class={`text-xs ${UI.textPrimary} font-bold`}>Browse [B]</Text></View>
+        <View class={`absolute left-[214] top-[184] w-[98] h-[34] items-center justify-center ${UI.btnDanger}`}><Text class="text-xs text-[#fecaca] font-bold">Stop</Text></View>
       </Show>
+
       <Show when={props.streamInfo}>
-        <Text class="absolute left-[12] top-[39] text-sm text-[#3c4954] font-bold">Stream</Text>
-        <Text class="absolute left-[12] top-[64] text-xs text-[#75409b]">Video {videoSizeText(props.videoSize)} · {props.displayFps ? `${props.displayFps.toFixed(1)} fps` : "measuring…"}</Text>
-        <Text class="absolute left-[12] top-[86] text-xs text-[#3c4954]">{props.profile?.hardware ? "MVD" : "CPU"} · H.264 / AAC · MPEG-TS</Text>
-        <Text class="absolute left-[12] top-[108] text-xs text-[#3c4954]">Max {props.profile?.maxWidth ?? 256}×{props.profile?.maxHeight ?? 144} · {props.profile?.maxFps ?? 12} fps</Text>
-        <Text class="absolute left-[12] top-[126] text-xs text-[#6a7680]">Video ≤{props.profile?.videoKbps ?? 192} kb/s · Audio ≤64 kb/s</Text>
-        <View class={props.infoFocus === 0 ? "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-[#f6edfa] to-[#dfc5ed] border-2 border-[#9452b3] rounded-lg" : "absolute left-[8] right-[8] top-[150] h-[35] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg"}><Text class="text-sm text-[#3c4954]">Quality</Text><Text class="text-sm text-[#75409b]">{props.quality === "native" ? "Native" : props.quality === "high" ? "High" : "Standard"} ›</Text></View>
-        <View class={props.infoFocus === 1 ? "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border-2 border-[#9452b3] rounded-lg overflow-hidden" : "absolute left-[8] right-[8] top-[190] h-[29] flex-row justify-around items-center bg-gradient-to-b from-white to-[#e7eaee] border border-[#bbc3ca] rounded-lg overflow-hidden"}>
-          <Text class="text-sm text-[#3c4954]">−</Text>
-          <Text class="text-sm text-[#75409b]">Volume {Math.round(props.volume * 100)}%</Text>
-          <Text class="text-sm text-[#3c4954]">+</Text>
-          <View class="absolute left-[6] bottom-0 h-[2] bg-[#aa5cc3]" style={{ width: Math.round(292 * props.volume) }} />
+        <View class={`absolute left-0 top-0 w-full h-[32] px-[12] flex-row items-center justify-between ${UI.headerBar}`}>
+          <Text class={`text-sm ${UI.textPrimary} font-bold`}>Stream &amp; Decoder</Text>
+          <Text class={`text-xs ${UI.textAccent} font-bold`}>Back [B]</Text>
+        </View>
+        <View class={`absolute left-[8] right-[8] top-[40] h-[54] px-[10] justify-center ${UI.card}`}>
+          <Text class={`text-xs ${UI.textAccent} font-bold`}>
+            Video {props.videoSize} · {props.displayFps ? `${props.displayFps.toFixed(1)} fps` : "measuring…"}
+            {props.decodeFps ? ` (dec ${props.decodeFps.toFixed(1)})` : ""}
+          </Text>
+          <Text class={`text-xs ${UI.textSecondary}`}>
+            Cap {props.profile?.maxWidth ?? 256}×{props.profile?.maxHeight ?? 144} · {props.profile?.maxFps ?? 12} fps · ≤{props.profile?.videoKbps ?? 192} kb/s
+          </Text>
+        </View>
+        <View class={`absolute left-[8] right-[8] top-[102] h-[36] px-[12] flex-row justify-between items-center ${props.infoFocus === 0 ? UI.btnPrimaryFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary}`}>Quality</Text>
+          <Text class={`text-sm ${UI.textAccent} font-bold`}>{props.quality === "native" ? "Native" : props.quality === "high" ? "High" : "Standard"} ›</Text>
+        </View>
+        <View class={`absolute left-[8] right-[8] top-[144] h-[36] px-[12] flex-row justify-between items-center ${props.infoFocus === 1 ? UI.btnPrimaryFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary}`}>Decoder</Text>
+          <Text class={`text-sm ${UI.textAccent} font-bold`}>{props.newModel ? (props.hardwareDecode ? "MVD Hardware ›" : "CPU Software ›") : "CPU (Old 3DS)"}</Text>
+        </View>
+        <View class={`absolute left-[8] right-[8] top-[186] h-[30] flex-row justify-around items-center overflow-hidden ${props.infoFocus === 2 ? UI.btnPrimaryFocused : UI.btnDefault}`}>
+          <Text class={`text-sm ${UI.textPrimary} font-bold`}>−</Text>
+          <Text class={`text-sm ${UI.textAccent} font-bold`}>Volume {Math.round(props.volume * 100)}%</Text>
+          <Text class={`text-sm ${UI.textPrimary} font-bold`}>+</Text>
+          <View class="absolute left-[6] bottom-0 h-[2] bg-[#a855f7]" style={{ width: Math.round(292 * props.volume) }} />
         </View>
       </Show>
     </>
   );
-}
-
-function videoSizeText(size: string) {
-  return size;
 }

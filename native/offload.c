@@ -30,7 +30,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.4"
+#define APP_VERSION "0.3.5"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -56,6 +56,7 @@ typedef struct {
   char token[TOKEN_MAX];
   char user_id[ID_MAX];
   char device_id[ID_MAX];
+  bool hardware_decode;
 } Config;
 
 typedef struct {
@@ -76,6 +77,8 @@ static unsigned takes;
 static Config config;
 static char playing_id[ID_MAX];
 static char playing_session[ID_MAX];
+static bool pending_play_report;
+static int64_t pending_play_ticks;
 
 static const cJSON *json_member(const cJSON *object, const char *key) {
   return cJSON_GetObjectItemCaseSensitive(object, key);
@@ -113,6 +116,7 @@ static bool config_save(void) {
   cJSON_AddStringToObject(root, "token", config.token);
   cJSON_AddStringToObject(root, "userId", config.user_id);
   cJSON_AddStringToObject(root, "deviceId", config.device_id);
+  cJSON_AddBoolToObject(root, "hardwareDecode", config.hardware_decode);
   char *text = cJSON_PrintUnformatted(root);
   cJSON_Delete(root);
   if (!text) return false;
@@ -163,6 +167,9 @@ static void config_load(void) {
         copy_text(config.user_id, sizeof config.user_id, user_id);
       if (device_id && valid_id(device_id))
         copy_text(config.device_id, sizeof config.device_id, device_id);
+      config.hardware_decode = json_bool(root, "hardwareDecode", false);
+      if (config.hardware_decode)
+        direct_media_set_mvd_enabled(true);
       cJSON_Delete(root);
     }
   }
@@ -316,6 +323,7 @@ static cJSON *hello_result(bool persisted) {
   cJSON_AddBoolToObject(result, "authenticated", authenticated());
   cJSON_AddBoolToObject(result, "persisted", persisted);
   cJSON_AddBoolToObject(result, "newModel", direct_media_is_new_model());
+  cJSON_AddBoolToObject(result, "hardware", direct_media_has_mvd());
   cJSON_AddStringToObject(result, "server", config.server);
   cJSON_AddStringToObject(result, "username", config.username);
   return result;
@@ -586,7 +594,8 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
     return false;
   }
   copy_text(playing_id, sizeof playing_id, id);
-  report_playback("", seek_ticks, false);
+  pending_play_report = true;
+  pending_play_ticks = seek_ticks;
 
   cJSON *reply = cJSON_CreateObject();
   cJSON *source = cJSON_AddObjectToObject(reply, "source");
@@ -780,6 +789,14 @@ static bool command_handle(const cJSON *command, cJSON **result, char *error,
     return list_command(command, result, error, error_capacity);
   if (strcmp(type, "play") == 0)
     return play_command(command, result, error, error_capacity);
+  if (strcmp(type, "decoder") == 0) {
+    bool want = json_bool(command, "hardware", false);
+    config.hardware_decode = direct_media_set_mvd_enabled(want);
+    config_save();
+    *result = cJSON_CreateObject();
+    cJSON_AddBoolToObject(*result, "hardware", config.hardware_decode);
+    return true;
+  }
   if (strcmp(type, "progress") == 0) {
     double seconds = json_number(command, "seconds", 0);
     bool paused = json_bool(command, "paused", false);
@@ -868,8 +885,13 @@ static void serve(void *unused) {
   atomic_store_explicit(&connection, 1, memory_order_release);
   while (atomic_load(&running)) {
     OffloadRecord record;
-    if (offload_pop(&outgoing, &record)) process_record(&record);
-    else svcSleepThread(1000000);
+    if (offload_pop(&outgoing, &record)) {
+      process_record(&record);
+      if (pending_play_report) {
+        pending_play_report = false;
+        report_playback("", pending_play_ticks, false);
+      }
+    } else svcSleepThread(1000000);
   }
   atomic_store_explicit(&connection, 0, memory_order_release);
 }

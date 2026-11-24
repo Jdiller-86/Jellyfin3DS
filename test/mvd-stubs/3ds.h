@@ -12,12 +12,15 @@ typedef struct { u32 physaddr_outdata0; } MVDSTD_Config;
 #define MVD_DEFAULT_WORKBUF_SIZE 4096
 #define MVD_STATUS_OK 0x17000
 #define MVD_STATUS_PARAMSET 0x17001
+#define MVD_STATUS_BUSY 0x17002
 #define MVD_STATUS_FRAMEREADY 0x17003
 #define MVD_CHECKNALUPROC_SUCCESS(x) ((x)==MVD_STATUS_OK || (x)==MVD_STATUS_PARAMSET || (x)==MVD_STATUS_FRAMEREADY)
 #define R_FAILED(x) ((x)<0)
 #define R_SUCCEEDED(x) ((x)>=0)
 void *linearAlloc(size_t);
+void *linearMemAlign(size_t,size_t);
 void linearFree(void *);
+void svcSleepThread(int64_t);
 void *osConvertOldLINEARMemToNew(const void *);
 u32 osConvertVirtToPhys(const void *);
 Result mvdstdInit(int,int,int,int,void *);

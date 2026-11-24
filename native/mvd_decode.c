@@ -51,8 +51,8 @@ bool mvd_init(mvd_ctx_t *ctx, int width, int height)
     if (R_FAILED(ret))
         return false;
 
-    /* Allocate NAL buffer in linear memory (required by MVD DMA) */
-    ctx->nal_buf = linearAlloc(NAL_BUF_SIZE);
+    /* Allocate NAL buffer in 4KB-aligned linear memory (required by MVD DMA) */
+    ctx->nal_buf = linearMemAlign(NAL_BUF_SIZE, 0x1000);
     if (!ctx->nal_buf) {
         mvdstdExit();
         return false;
@@ -60,10 +60,10 @@ bool mvd_init(mvd_ctx_t *ctx, int width, int height)
     ctx->nal_buf_size = NAL_BUF_SIZE;
     ctx->initialized = true;
 
-    /* Allocate double-buffered output frames in linear memory */
+    /* Allocate double-buffered output frames in 4KB-aligned linear memory */
     int frame_size = ctx->width * ctx->height * 2; /* BGR565 = 2 bytes/pixel */
     for (int i = 0; i < 2; i++) {
-        ctx->frame_buf[i] = linearAlloc(frame_size);
+        ctx->frame_buf[i] = linearMemAlign(frame_size, 0x1000);
         if (!ctx->frame_buf[i]) {
             mvd_cleanup(ctx);
             return false;
@@ -72,7 +72,6 @@ bool mvd_init(mvd_ctx_t *ctx, int width, int height)
     }
 
     ctx->frame_write_idx = 0;
-    ctx->initialized = true;
     return true;
 }
 
@@ -101,59 +100,51 @@ bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_si
     if (!ctx->initialized || !extradata || extradata_size < 8 || extradata[0] != 1)
         return false;
 
-    /* AVCC extradata layout:
-     * [0]    version
-     * [1-3]  profile, compat, level
-     * [4]    length_size_minus_one (lower 2 bits)
-     * [5]    num_sps (lower 5 bits)
-     * [6-7]  sps_length (big-endian)
-     * [8..]  sps_data
-     * [..]   num_pps
-     * [..]   pps_length
-     * [..]   pps_data
-     */
-
+    int num_sps = extradata[5] & 0x1f;
     int offset = 6;
-    int sps_len = (extradata[offset] << 8) | extradata[offset + 1];
-    offset += 2;
 
-    if (offset + sps_len > extradata_size)
-        return false;
+    for (int i = 0; i < num_sps; i++) {
+        if (offset + 2 > extradata_size) return false;
+        int sps_len = (extradata[offset] << 8) | extradata[offset + 1];
+        offset += 2;
+        if (sps_len <= 0 || offset + sps_len > extradata_size ||
+            sps_len + 3 > ctx->nal_buf_size)
+            return false;
 
-    /* Send SPS with Annex B start code */
-    int pos = 0;
-    ctx->nal_buf[pos++] = 0x00;
-    ctx->nal_buf[pos++] = 0x00;
-    ctx->nal_buf[pos++] = 0x01;
-    memcpy(ctx->nal_buf + pos, extradata + offset, sps_len);
-    pos += sps_len;
+        ctx->nal_buf[0] = 0x00;
+        ctx->nal_buf[1] = 0x00;
+        ctx->nal_buf[2] = 0x01;
+        memcpy(ctx->nal_buf + 3, extradata + offset, sps_len);
+        GSPGPU_FlushDataCache(ctx->nal_buf, sps_len + 3);
+        void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
+        if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
+        Result ret = mvdstdProcessVideoFrame(mapped, sps_len + 3, 0, NULL);
+        if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
+        offset += sps_len;
+    }
 
-    GSPGPU_FlushDataCache(ctx->nal_buf, pos);
-    mvdstdProcessVideoFrame(osConvertOldLINEARMemToNew(ctx->nal_buf), pos, 0, NULL);
-
-    offset += sps_len;
-
-    /* PPS count byte */
     if (offset >= extradata_size) return false;
-    offset++; /* skip num_pps */
+    int num_pps = extradata[offset++];
 
-    if (offset + 2 > extradata_size) return false;
-    int pps_len = (extradata[offset] << 8) | extradata[offset + 1];
-    offset += 2;
+    for (int i = 0; i < num_pps; i++) {
+        if (offset + 2 > extradata_size) return false;
+        int pps_len = (extradata[offset] << 8) | extradata[offset + 1];
+        offset += 2;
+        if (pps_len <= 0 || offset + pps_len > extradata_size ||
+            pps_len + 3 > ctx->nal_buf_size)
+            return false;
 
-    if (offset + pps_len > extradata_size)
-        return false;
-
-    /* Send PPS with Annex B start code */
-    pos = 0;
-    ctx->nal_buf[pos++] = 0x00;
-    ctx->nal_buf[pos++] = 0x00;
-    ctx->nal_buf[pos++] = 0x01;
-    memcpy(ctx->nal_buf + pos, extradata + offset, pps_len);
-    pos += pps_len;
-
-    GSPGPU_FlushDataCache(ctx->nal_buf, pos);
-    mvdstdProcessVideoFrame(osConvertOldLINEARMemToNew(ctx->nal_buf), pos, 0, NULL);
+        ctx->nal_buf[0] = 0x00;
+        ctx->nal_buf[1] = 0x00;
+        ctx->nal_buf[2] = 0x01;
+        memcpy(ctx->nal_buf + 3, extradata + offset, pps_len);
+        GSPGPU_FlushDataCache(ctx->nal_buf, pps_len + 3);
+        void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
+        if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
+        Result ret = mvdstdProcessVideoFrame(mapped, pps_len + 3, 0, NULL);
+        if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
+        offset += pps_len;
+    }
 
     ctx->sps_sent = true;
     return true;
@@ -175,7 +166,7 @@ static bool mvd_submit_nal(mvd_ctx_t *ctx, const uint8_t *nal, size_t length,
     memcpy(ctx->nal_buf + 3, nal, length);
     GSPGPU_FlushDataCache(ctx->nal_buf, length + 3);
     void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
-    if (!mapped || ((uintptr_t)mapped & 3)) return false;
+    if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
 
     Result ret = mvdstdProcessVideoFrame(mapped, length + 3, 0, NULL);
     static unsigned unit_logs;
@@ -193,13 +184,12 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
         return false;
 
     /* Detect packet format:
-     * - TS demuxer: already Annex B (starts with 00 00 00 01 or 00 00 01)
+     * - TS demuxer: Annex B (may have leading 0x00 padding before 00 00 01)
      * - MP4 demuxer: AVCC format (4-byte big-endian length prefix) */
-    bool is_annexb = (size >= 4 &&
-                      data[0] == 0x00 && data[1] == 0x00 &&
-                      (data[2] == 0x01 || (data[2] == 0x00 && data[3] == 0x01)));
-
-    if (size > ctx->nal_buf_size) return false;
+    int lead = 0;
+    while (lead + 3 <= size && data[lead] == 0x00 && data[lead + 1] == 0x00 && data[lead + 2] == 0x00)
+        lead++;
+    bool is_annexb = (lead + 3 <= size && data[lead] == 0x00 && data[lead + 1] == 0x00 && data[lead + 2] == 0x01);
 
     /* Sanity check: reject obviously corrupt NAL data before feeding MVD.
      * MVD operates via DMA — corrupt input can crash the entire system. */
@@ -233,13 +223,12 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
 
     /* Do not configure/render before SPS/PPS and a ready frame. The MVD
      * system process treats an early rendering request as a fatal state. */
-    GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], ctx->width * ctx->height * 2);
 
     Result ret = MVD_STATUS_PARAMSET;
     bool decoded = false;
 
     if (is_annexb) {
-        int start = 0;
+        int start = lead > 0 && data[lead - 1] == 0x00 ? lead - 1 : lead;
         while (start < size) {
             int prefix = 0;
             if (start + 3 <= size && !data[start] && !data[start + 1]) {
@@ -286,13 +275,18 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
 
     /* Try to render the decoded frame */
     if (decoded) {
-        ret = mvdstdRenderVideoFrame(&config, true);
+        size_t frame_bytes = (size_t)ctx->width * ctx->height * 2;
+        GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], frame_bytes);
+        for (int tries = 0; tries < 50; tries++) {
+            ret = mvdstdRenderVideoFrame(&config, true);
+            if (ret != MVD_STATUS_BUSY) break;
+            svcSleepThread(500000LL);
+        }
         if (frame_count <= 5 || frame_count % 100 == 0) {
             log_write("MVD: RenderFrame ret=0x%08lX", (unsigned long)ret);
         }
         if (ret == MVD_STATUS_OK) {
-            GSPGPU_InvalidateDataCache(ctx->frame_buf[ctx->frame_write_idx],
-                                   ctx->width * ctx->height * 2);
+            GSPGPU_InvalidateDataCache(ctx->frame_buf[ctx->frame_write_idx], frame_bytes);
             ctx->frame_write_idx ^= 1; /* swap double buffer */
             ctx->frame_ready = true;
             return true;

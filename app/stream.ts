@@ -4,9 +4,9 @@ export function clampPosition(seconds: number, duration: number): number {
 }
 
 export function seekAtX(x: number, duration: number): number {
-  return clampPosition((x - 24) / 272 * duration, duration);
+  return clampPosition((x - 16) / 288 * duration, duration);
 }
 
 export function progressWidth(seconds: number, duration: number): number {
-  return duration > 0 ? Math.round(272 * clampPosition(seconds, duration) / duration) : 0;
+  return duration > 0 ? Math.round(288 * clampPosition(seconds, duration) / duration) : 0;
 }

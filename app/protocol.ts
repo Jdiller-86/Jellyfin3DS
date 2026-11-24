@@ -16,6 +16,7 @@ export interface Hello {
   authenticated: boolean;
   persisted?: boolean;
   newModel: boolean;
+  hardware?: boolean;
   server: string;
   username: string;
 }

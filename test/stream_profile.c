@@ -12,8 +12,8 @@ int main(void) {
   assert(new_sw.width == 400 && new_sw.height == 240 && new_sw.fps == 30);
   assert(new_sw.video_kbps == 850);
   J3DSStreamProfile new_hw = j3ds_stream_profile(true, true, "native");
-  assert(new_hw.width == 400 && new_hw.height == 240 && new_hw.fps == 60);
-  assert(new_hw.video_kbps == 1200);
+  assert(new_hw.width == 400 && new_hw.height == 240 && new_hw.fps == 30);
+  assert(new_hw.video_kbps == 900);
   J3DSStreamProfile new_standard = j3ds_stream_profile(true, true, NULL);
   assert(new_standard.fps == 24 && new_standard.video_kbps == 472);
   return 0;

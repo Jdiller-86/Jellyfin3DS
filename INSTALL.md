@@ -14,7 +14,7 @@ No computer, phone, companion app, proxy, administrator API key, or Jellyfin plu
 For a network install, open **FBI → Remote Install → Scan QR Code** and scan `FBI-QR.png` from the release or repository README. It downloads this exact CIA asset:
 
 ```text
-https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia
+https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.5/Jellyfin3DS.cia
 ```
 
 FBI must be able to reach that URL without a GitHub login. Private-repository release assets are not anonymously downloadable, so use the manual method until the repository or a binary-only release mirror is public.
@@ -35,10 +35,10 @@ If the banner still shows an older version, use a clean reinstall to clear stale
 
 1. In FBI → Titles, select **Jellyfin3DS** (title ID `000400000FF00900`) and choose **Delete Title**. Do not select another title.
 2. Exit to HOME Menu and wait for its icon to disappear, then reboot.
-3. Open FBI and install v0.3.4 using the QR code above or the CIA download.
-4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.4**. Reboot once before testing launch.
+3. Open FBI and install v0.3.5 using the QR code above or the CIA download.
+4. Return to HOME Menu and select Jellyfin3DS. Its upper-screen banner must show **v0.3.5**. Reboot once before testing launch.
 
-Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.4 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
+Connection settings are stored in `sd:/3ds/Jellyfin3DS/config.json`, outside the installed title; keep that folder. The v0.3.5 banner contains no audio block and uses the upstream Jellyfin service artwork. The console's own launch sound is unaffected. The authenticated Homebrew launch splash remains until a valid replacement can be produced; the earlier custom archive caused launch failures.
 
 ## 2. Sign in on the 3DS
 
@@ -56,18 +56,17 @@ For HTTPS, the certificate must chain to a public CA included in the app. Self-s
 
 | Control | Action |
 | --- | --- |
-| D-pad Up/Down | Select a list or highlighted player/settings action |
-| A | Confirm the highlighted action; pause/play when Play is focused |
-| B | Back; close the keyboard |
-| Vertical swipe | Scroll continuously; release to coast |
-| Now playing | Return to controls without restarting video |
-| Left/Right | Seek 10 seconds in player controls; adjust volume in Stream |
-| X | Open search; START submits the keyboard |
-| Y | Continue watching |
-| SELECT | Open Account, or switch back to active player controls |
+| D-pad Up/Down / Circle Pad | Scroll lists (hold to repeat); adjust volume in player; select in Detail/Account/Stream |
+| D-pad Left/Right | Jump 5 rows in lists; seek ±10s in player; change Quality/Decoder/Volume in Stream |
+| A | Confirm / open; Play/Pause in player; toggle options in Stream |
+| B | Back; minimize player controls while video keeps playing; close keyboard |
+| L / R | Cycle tabs in browser; seek ±30s in player |
+| X | Open Search in browser; toggle Stream & Decoder panel in player |
+| Y | Continue watching in browser; cycle Quality preset in player |
+| ZR | Play next episode in player |
 | START | Pause/resume during playback |
-| L / R | Seek backward/forward 10 seconds |
-| Touch screen | Tap a row to preview art, tap again to open; swipe vertically to browse; drag or tap the playback timeline to seek |
+| SELECT | Switch between browser and active player controls, or open Account |
+| Touch screen | Tap row to preview art, tap again to open; swipe to scroll; drag timeline or tap transport deck |
 | L + R + START | Exit the PocketJS host |
 
 Stop playback before exiting when possible so Jellyfin receives the latest resume position.
@@ -88,12 +87,12 @@ Stop playback before exiting when possible so Jellyfin receives the latest resum
 
 **CIA versus 3DSX:** both formats run the same direct client. Both target original and New models and require DSP firmware, network access, and server transcoding.
 
-**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.4` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
+**FBI says the QR URL cannot be downloaded:** confirm the 3DS has Internet access and that the `v0.3.5` release is publicly accessible. FBI cannot authenticate to a private GitHub release.
 
 
 ## Confirm the installed build
 
-Open Account and check **v0.3.4**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
+Open Account and check **v0.3.5**; also check the HOME Menu banner version. An older QR code deliberately installs its older, version-pinned release. Use this release's QR. If the app and banner versions differ, follow the title-specific clean reinstall above; do not delete HOME Menu shared extdata.
 
 ## Native-screen video on New 3DS
 

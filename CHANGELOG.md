@@ -15,6 +15,12 @@ All notable changes to **Jellyfin3DS** are documented in this file.
 - Removed unused write-only tracking fields (`PreparedStream.generation`, `offload_measure` counters).
 - Added native C unit tests for `native/offload_util.h` (`test/offload_util.c`) and `j3ds_yuv420p_to_rgb565` (`test/rgb565.c`).
 
+## [0.3.5] - 2026-11-23
+
+- **New 3DS Hardware & 30 fps Pipeline:** Enabled `osSetSpeedupEnable(true)` (804 MHz + L2 cache) and RSF `CpuSpeed: 804MHz` / `EnableL2Cache: true`; replaced CPU Morton tiling with hardware `C3D_SyncDisplayTransfer` DMA and `LightEvent` frame handoff.
+- **MVD Hardware Decoder Fixes:** Enforced 4 KB `linearMemAlign` DMA buffers, fixed multi-SPS/PPS AVCC parsing, skipped leading-zero Annex B padding, added `MVD_STATUS_BUSY` retry, capped MVD `Native` at `400×240 @ 30 fps`, and added an in-app **Stream → Decoder** toggle with software fallback.
+- **Dark-Cinema UI & Controls Overhaul:** Redesigned all screens with high-contrast dark obsidian/purple tokens, widened the `288px` draggable timeline, added a 5-button transport deck (`−30s`, `−10s`, `Pause/Play`, `+10s`, `+30s`), Circle Pad hold-to-repeat, `L`/`R` tab cycling and `±30s` seek, and `Up`/`Down` volume control.
+
 ## [0.3.4] - 2026-09-23
 
 ### Added

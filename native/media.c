@@ -1,5 +1,6 @@
 #include "media.h"
 #include "direct_media.h"
+#include "offload_util.h"
 #include "video/mvd_decode.h"
 #include "pocket_core.h"
 #include "video/video_player.h"
@@ -36,11 +37,17 @@ static bool close_pending;
 static bool open_failed;
 static bool has_frame;
 static bool desired_paused;
+static bool mvd_available;
 static bool hardware_supported;
 bool direct_media_has_mvd(void) { return hardware_supported; }
+bool direct_media_set_mvd_enabled(bool enabled) {
+  hardware_supported = enabled && mvd_available;
+  return hardware_supported;
+}
 static bool new_model_supported;
 bool direct_media_is_new_model(void) { return new_model_supported; }
 static float desired_volume = 0.8f;
+static float applied_volume = -1.0f;
 static int32_t texture_handle = -1;
 static uint8_t *art_pending;
 static int art_width, art_height, art_handle = -1;
@@ -150,12 +157,13 @@ int direct_art_upload(uint8_t *pixels, int width, int height) {
     if (done) return handle;
     svcSleepThread(10000000LL);
   }
+  LightLock_Lock(&prepared_lock);
+  if (art_pending == pixels) {
+    free(art_pending);
+    art_pending = NULL;
+  }
+  LightLock_Unlock(&prepared_lock);
   return -1;
-}
-
-static void copy_text(char *out, size_t capacity, const char *value) {
-  if (!capacity) return;
-  snprintf(out, capacity, "%s", value ? value : "");
 }
 
 bool direct_media_prepare(const char *url, const char *token,
@@ -167,8 +175,8 @@ bool direct_media_prepare(const char *url, const char *token,
     return false;
   }
   LightLock_Lock(&prepared_lock);
-  copy_text(prepared.url, sizeof prepared.url, url);
-  copy_text(prepared.token, sizeof prepared.token, token);
+  j3ds_copy_text(prepared.url, sizeof prepared.url, url);
+  j3ds_copy_text(prepared.token, sizeof prepared.token, token);
   prepared.duration_ticks = duration_ticks;
   prepared.seek_ticks = seek_ticks;
   prepared.ready = true;
@@ -192,13 +200,15 @@ bool media_start(void) {
   /* Never probe the New-only MVD service on original models. */
   bool new_model = false;
   new_model_supported = R_SUCCEEDED(APT_CheckNew3DS(&new_model)) && new_model;
+  if (new_model_supported) osSetSpeedupEnable(true);
   hardware_supported = new_model_supported;
   /* A system-service abort cannot be caught by the app. Require explicit
    * opt-in until the repaired transport is verified on hardware. */
   hidScanInput();
-  if (!(hidKeysHeld() & KEY_R) || (hidKeysHeld() & KEY_L)) hardware_supported = false;
-  if (hardware_supported) hardware_supported = mvd_is_available();
-  log_write("DEC backend=%s", hardware_supported ? "MVD" : "software");
+  if (!(hidKeysHeld() & KEY_L) && new_model_supported)
+    mvd_available = mvd_is_available();
+  hardware_supported = mvd_available && (hidKeysHeld() & KEY_R);
+  log_write("DEC backend=%s (mvd_avail=%d)", hardware_supported ? "MVD" : "software", mvd_available);
   MemInfo dsp_memory;
   PageInfo dsp_page;
   ndsp_result = svcQueryMemory(&dsp_memory, &dsp_page, 0x1ff50000);
@@ -218,10 +228,18 @@ void media_stop(void) {
   log_close();
   curl_global_cleanup();
   direct_media_forget_prepared();
+  LightLock_Lock(&prepared_lock);
+  if (art_pending) {
+    free(art_pending);
+    art_pending = NULL;
+  }
+  LightLock_Unlock(&prepared_lock);
   started = false;
   ndsp_ready = false;
   new_model_supported = false;
+  mvd_available = false;
   hardware_supported = false;
+  applied_volume = -1.0f;
   requested_open = false;
   open_pending = false;
   close_pending = false;
@@ -251,6 +269,7 @@ bool media_open(const char *host, unsigned port, const char *token) {
   open_failed = false;
   has_frame = false;
   desired_paused = false;
+  applied_volume = -1.0f;
   return true;
 }
 
@@ -305,14 +324,21 @@ C3D_Tex *media_texture(int32_t handle, float *u_scale, float *v_scale) {
 
 void media_present(void) {
   LightLock_Lock(&prepared_lock);
-  if (art_pending) {
-    if (art_handle >= 0) ui_free_texture(art_handle);
-    art_handle = ui_upload_texture(art_pending, (size_t)art_width * art_height * 4,
-                                  art_width, art_height, 3);
-    free(art_pending); art_pending = NULL;
-    art_complete = art_request;
-  }
+  uint8_t *pixels = art_pending;
+  int w = art_width, h = art_height;
+  unsigned req = art_request;
+  int old_art = art_handle;
+  art_pending = NULL;
   LightLock_Unlock(&prepared_lock);
+  if (pixels) {
+    if (old_art >= 0) ui_free_texture(old_art);
+    int new_art = ui_upload_texture(pixels, (size_t)w * h * 4, w, h, 3);
+    free(pixels);
+    LightLock_Lock(&prepared_lock);
+    art_handle = new_art;
+    art_complete = req;
+    LightLock_Unlock(&prepared_lock);
+  }
   /* FrameBegin has retired the prior PICA list before this call, so texture
    * deletion and creation happen only at this GPU-idle boundary. */
   if (close_pending) {
@@ -334,16 +360,15 @@ void media_present(void) {
   if ((status.state == VIDEO_PLAYING && desired_paused) ||
       (status.state == VIDEO_PAUSED && !desired_paused)) video_player_pause();
 
-  if (ndsp_ready) {
+  if (ndsp_ready && desired_volume != applied_volume) {
     float mix[12] = {0};
     mix[0] = desired_volume;
     mix[1] = desired_volume;
     ndspChnSetMix(1, mix);
+    applied_volume = desired_volume;
   }
 
-  video_player_present();
-  float u = 1.0f, v = 1.0f;
-  if (video_player_texture(&u, &v)) has_frame = true;
+  if (video_player_present()) has_frame = true;
 }
 
 static void safe_error(char *out, size_t capacity, const char *value) {
@@ -376,14 +401,14 @@ void media_snapshot(char *out, size_t capacity) {
   char error[128] = {0};
   if (requested_open && open_failed) {
     phase = "error";
-    copy_text(error, sizeof error, "Could not allocate the video player");
+    j3ds_copy_text(error, sizeof error, "Could not allocate the video player");
   } else if (requested_open && !ndsp_ready) {
     phase = "error";
     if ((unsigned)ndsp_result ==
         (unsigned)MAKERESULT(RL_PERMANENT, RS_NOTFOUND, RM_DSP, RD_NOT_FOUND)) {
-      copy_text(error, sizeof error, "DSP firmware missing; dump it in Rosalina");
+      j3ds_copy_text(error, sizeof error, "DSP firmware missing; dump it in Rosalina");
     } else {
-      copy_text(error, sizeof error, "Audio output unavailable");
+      j3ds_copy_text(error, sizeof error, "Audio output unavailable");
     }
   } else {
     safe_error(error, sizeof error, status.error_msg);
@@ -394,6 +419,8 @@ void media_snapshot(char *out, size_t capacity) {
     ? (unsigned)(status.duration_ticks / 10000) : 0;
   double decode_fps = isfinite(status.decode_fps) && status.decode_fps > 0 ? status.decode_fps : 0;
   double display_fps = isfinite(status.display_fps) && status.display_fps > 0 ? status.display_fps : 0;
+  unsigned decoded_frames = status.frames_decoded > 0 ? (unsigned)status.frames_decoded : (has_frame ? 1u : 0u);
+  unsigned presented_frames = status.frames_displayed > 0 ? (unsigned)status.frames_displayed : (has_frame ? 1u : 0u);
   snprintf(out, capacity,
     "{\"phase\":\"%s\",\"positionMs\":%u,\"durationMs\":%u,"
     "\"bufferedMs\":0,\"decodedFrames\":%u,\"presentedFrames\":%u,"
@@ -401,7 +428,7 @@ void media_snapshot(char *out, size_t capacity) {
     "\"audioUnderruns\":0,\"hardware\":%s,\"videoWidth\":%d,"
     "\"videoHeight\":%d,\"decodeFps\":%.1f,\"displayFps\":%.1f,"
     "\"error\":\"%s\"}",
-    phase, position, duration, has_frame ? 1u : 0u, has_frame ? 1u : 0u,
+    phase, position, duration, decoded_frames, presented_frames,
     hardware_supported ? "true" : "false",
     status.video_width, status.video_height, decode_fps, display_fps, error);
 }

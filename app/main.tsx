@@ -1,7 +1,7 @@
 import { createSignal, For, Show, onCleanup } from "solid-js";
 import { mount } from "@pocketjs/framework/solid";
 import { AuxiliarySurface, View, Text, Image, type NodeMirror } from "@pocketjs/framework/components";
-import { onFrame, onButtonPress } from "@pocketjs/framework/lifecycle";
+import { onFrame, onButtonPress, analogY } from "@pocketjs/framework/lifecycle";
 import { BTN } from "@pocketjs/framework/input";
 import { createGesture } from "@pocketjs/framework/gesture";
 import { offload } from "@pocketjs/framework/offload";
@@ -21,6 +21,7 @@ import {
 import { clampPosition, seekAtX } from "./stream.ts";
 import {
   ROW_HEIGHT,
+  UI,
   clampScroll as clampListScroll,
   hitTestControls,
   hitTestDetail,
@@ -67,16 +68,18 @@ function App() {
   const [status, setStatus] = createSignal<PlayerStatus>();
   const [controls, setControls] = createSignal(false);
   const [streamInfo, setStreamInfo] = createSignal(false);
-  const [controlFocus, setControlFocus] = createSignal(0);
   const [infoFocus, setInfoFocus] = createSignal(0);
   const [seekPreview, setSeekPreview] = createSignal<number>();
   const [quality, setQuality] = createSignal<Quality>("standard");
   const [profile, setProfile] = createSignal<StreamProfile>();
   const [newModel, setNewModel] = createSignal(false);
+  const [hardwareDecode, setHardwareDecode] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [volume, setVolume] = createSignal(0.8);
   let history: { location: Location; page: Page; index: number; scroll: number }[] = [];
   let frame = 0;
+  let navHold = 0;
+  let navDir = 0;
   let session = 0;
   let operation = 0;
   let plane: NodeMirror | undefined;
@@ -123,7 +126,7 @@ function App() {
     scrollTarget = clampScroll(scrollTarget);
     velocity = 0;
   }
-  function nowPlaying() { if (playing()) { setDetail(undefined); setControls(true); setStreamInfo(false); setControlFocus(0); velocity = 0; } }
+  function nowPlaying() { if (playing()) { setDetail(undefined); setControls(true); setStreamInfo(false); velocity = 0; } }
   function prefetch() {
     if (fetchingMore() || busy() || frame < retryAfter || screen() !== "browser" || controls() || detail()) return;
     const current = page();
@@ -253,6 +256,7 @@ function App() {
         setPassword("");
         setAuthenticated(hello.authenticated);
         setNewModel(hello.newModel);
+        setHardwareDecode(Boolean(hello.hardware));
         setServer(hello.server || server());
         setUsername(hello.username || username());
         if (!hello.authenticated) {
@@ -384,20 +388,31 @@ function App() {
     if (Math.abs(target - (status()?.positionMs ?? 0) / 1000) >= 1) play(item, target);
   }
 
-  function switchQuality() {
+  function switchQuality(dir = 1) {
     if (busy()) return;
-    setQuality(quality() === "standard" ? "high" : quality() === "high" && newModel() ? "native" : "standard");
+    const order: Quality[] = newModel() ? ["standard", "high", "native"] : ["standard", "high"];
+    const next = order[(order.indexOf(quality()) + dir + order.length) % order.length];
+    setQuality(next);
     if (playing()) play(playing()!, (status()?.positionMs ?? 0) / 1000);
   }
 
-  function activateControl() {
-    if (streamInfo()) {
-      if (infoFocus() === 0) switchQuality();
-      else changeVolume(0.1);
-    } else if (controlFocus() === 0) pause();
-    else if (controlFocus() === 1) { setStreamInfo(true); setInfoFocus(0); }
-    else if (controlFocus() === 2) setControls(false);
-    else stop();
+  function toggleDecoder() {
+    if (busy() || !newModel()) return;
+    command({ t: "decoder", hardware: !hardwareDecode() }, (reply: { hardware: boolean }) => {
+      setHardwareDecode(Boolean(reply.hardware));
+      if (playing()) play(playing()!, (status()?.positionMs ?? 0) / 1000);
+    });
+  }
+
+  function cycleTab(dir: 1 | -1) {
+    if (busy() || screen() !== "browser" || controls() || detail()) return;
+    const tabs: ("libraries" | "resume" | "search" | "setup")[] = ["libraries", "resume", "search", "setup"];
+    const cur = where().mode === "folder" ? "libraries" : where().mode;
+    const next = tabs[(tabs.indexOf(cur) + dir + tabs.length) % tabs.length];
+    if (next === "libraries") home("libraries");
+    else if (next === "resume") home("resume");
+    else if (next === "search") editField("search");
+    else showSetup();
   }
 
   function back() {
@@ -440,43 +455,73 @@ function App() {
   }
 
   function moveDetail(delta: number) {
-    const choices = detail()?.resume ? [0,1,2] : [0,2];
-    const position = Math.max(0,choices.indexOf(detailFocus()));
-    setDetailFocus(choices[Math.max(0,Math.min(choices.length-1,position+delta))]);
+    const choices = detail()?.resume ? (playing() ? [0, 1, 2, 3] : [0, 1, 2]) : (playing() ? [0, 2, 3] : [0, 2]);
+    const position = Math.max(0, choices.indexOf(detailFocus()));
+    setDetailFocus(choices[Math.max(0, Math.min(choices.length - 1, position + delta))]);
   }
   function activateDetail() {
     if (!detail() || busy()) return;
     if (detailFocus() === 2) back();
+    else if (detailFocus() === 3) nowPlaying();
     else play(detail()!, detailFocus() === 1 ? 0 : detail()!.resume);
   }
 
-  onButtonPress(BTN.UP, () => {
-    if (screen() === "setup") setSetupField(Math.max(0, setupField() - 1));
-    else if (controls()) streamInfo() ? setInfoFocus(Math.max(0, infoFocus() - 1)) : setControlFocus(Math.max(0, controlFocus() - 1));
-    else if (detail() && !controls()) moveDetail(-1);
-    else if (!controls()) move(-1);
+  function stepVertical(dir: -1 | 1) {
+    if (screen() === "setup") setSetupField(Math.max(0, Math.min(authenticated() ? 4 : 3, setupField() + dir)));
+    else if (controls() && streamInfo()) setInfoFocus(Math.max(0, Math.min(2, infoFocus() + dir)));
+    else if (controls() && !streamInfo()) changeVolume(dir < 0 ? 0.1 : -0.1);
+    else if (detail()) moveDetail(dir);
+    else move(dir);
+  }
+
+  onButtonPress(BTN.UP, () => stepVertical(-1));
+  onButtonPress(BTN.DOWN, () => stepVertical(1));
+  onButtonPress(BTN.LEFT, () => {
+    if (screen() === "setup" && authenticated() && setupField() >= 3) setSetupField(3);
+    else if (screen() === "browser" && controls() && streamInfo()) {
+      if (infoFocus() === 0) switchQuality(-1);
+      else if (infoFocus() === 1) toggleDecoder();
+      else changeVolume(-0.1);
+    } else if (screen() === "browser" && controls()) seek(-10);
+    else if (screen() === "browser" && detail() && playing() && detailFocus() >= 2) setDetailFocus(2);
+    else if (screen() === "browser" && !controls() && !detail()) move(-5);
   });
-  onButtonPress(BTN.DOWN, () => {
-    if (screen() === "setup") setSetupField(Math.min(authenticated() ? 4 : 3, setupField() + 1));
-    else if (controls()) streamInfo() ? setInfoFocus(Math.min(1, infoFocus() + 1)) : setControlFocus(Math.min(3, controlFocus() + 1));
-    else if (detail() && !controls()) moveDetail(1);
-    else if (!controls()) move(1);
+  onButtonPress(BTN.RIGHT, () => {
+    if (screen() === "setup" && authenticated() && setupField() >= 3) setSetupField(4);
+    else if (screen() === "browser" && controls() && streamInfo()) {
+      if (infoFocus() === 0) switchQuality(1);
+      else if (infoFocus() === 1) toggleDecoder();
+      else changeVolume(0.1);
+    } else if (screen() === "browser" && controls()) seek(10);
+    else if (screen() === "browser" && detail() && playing() && detailFocus() >= 2) setDetailFocus(3);
+    else if (screen() === "browser" && !controls() && !detail()) move(5);
   });
-  onButtonPress(BTN.LEFT, () => screen() === "browser" && controls() && (streamInfo() ? changeVolume(-0.1) : seek(-10)));
-  onButtonPress(BTN.RIGHT, () => screen() === "browser" && controls() && (streamInfo() ? changeVolume(0.1) : seek(10)));
   onButtonPress(BTN.CIRCLE, () => {
     if (screen() === "setup") editSetupField();
-    else if (controls()) activateControl();
+    else if (controls() && streamInfo()) {
+      if (infoFocus() === 0) switchQuality(1);
+      else if (infoFocus() === 1) toggleDecoder();
+      else changeVolume(0.1);
+    } else if (controls()) pause();
     else if (detail()) activateDetail();
     else if (page().items[index()]) open(page().items[index()]);
   });
   onButtonPress(BTN.CROSS, back);
-  onButtonPress(BTN.TRIANGLE, () => screen() === "browser" && !busy() && editField("search"));
-  onButtonPress(BTN.SQUARE, () => screen() === "browser" && home("resume"));
+  onButtonPress(BTN.TRIANGLE, () => {
+    if (screen() !== "browser" || busy()) return;
+    if (controls()) setStreamInfo(!streamInfo());
+    else editField("search");
+  });
+  onButtonPress(BTN.SQUARE, () => {
+    if (screen() !== "browser" || busy()) return;
+    if (controls()) switchQuality(1);
+    else home("resume");
+  });
   onButtonPress(BTN.START, pause);
   onButtonPress(BTN.SELECT, () => playing() ? (controls() ? setControls(false) : nowPlaying()) : showSetup());
-  onButtonPress(BTN.LTRIGGER, () => seek(-10));
-  onButtonPress(BTN.RTRIGGER, () => seek(10));
+  onButtonPress(BTN.LTRIGGER, () => controls() ? seek(-30) : cycleTab(-1));
+  onButtonPress(BTN.RTRIGGER, () => controls() ? seek(30) : cycleTab(1));
+  onButtonPress(BTN.ZR, () => { const next = nextItem(); if (controls() && next) play(next, 0); });
 
   createGesture({
     surface: "auxiliary",
@@ -506,6 +551,23 @@ function App() {
         }
         return;
       }
+      if (controls()) {
+        const action = hitTestControls(contact.x, contact.y, streamInfo());
+        if (action === "closeStream") setStreamInfo(false);
+        else if (action === "quality") { setInfoFocus(0); switchQuality(1); }
+        else if (action === "decoder") { setInfoFocus(1); toggleDecoder(); }
+        else if (action === "volDown") { setInfoFocus(2); changeVolume(-0.1); }
+        else if (action === "volUp") { setInfoFocus(2); changeVolume(0.1); }
+        else if (action === "seekBack30") seek(-30);
+        else if (action === "seekBack") seek(-10);
+        else if (action === "pause") pause();
+        else if (action === "seekFwd") seek(10);
+        else if (action === "seekFwd30") seek(30);
+        else if (action === "stream") { setStreamInfo(true); setInfoFocus(0); }
+        else if (action === "browse") setControls(false);
+        else if (action === "stop") stop();
+        return;
+      }
       if (contact.y < 32) {
         const target = hitTestNav(contact.x);
         if (target === "libraries") home("libraries");
@@ -515,19 +577,6 @@ function App() {
         return;
       }
       if (!controls() && playing() && contact.y >= 192 && contact.y < 220 && contact.x >= 100) { nowPlaying(); return; }
-      if (controls()) {
-        const action = hitTestControls(contact.x, contact.y, streamInfo());
-        if (action === "quality") { setInfoFocus(0); switchQuality(); }
-        else if (action === "volDown") { setInfoFocus(1); changeVolume(-0.1); }
-        else if (action === "volUp") { setInfoFocus(1); changeVolume(0.1); }
-        else if (action === "seekBack") seek(-10);
-        else if (action === "pause") { setControlFocus(0); pause(); }
-        else if (action === "seekFwd") seek(10);
-        else if (action === "stream") { setControlFocus(1); setStreamInfo(true); setInfoFocus(0); }
-        else if (action === "browse") { setControlFocus(2); setControls(false); }
-        else if (action === "stop") { setControlFocus(3); stop(); }
-        return;
-      }
       if (detail()) {
         const action = hitTestDetail(contact.x, contact.y, detail()!.resume > 0, Boolean(playing()));
         if (action === "resume") play(detail()!, detail()!.resume);
@@ -552,7 +601,7 @@ function App() {
   // Commit a seek once on release, so dragging never spawns multiple server transcodes.
   createGesture({
     surface: "auxiliary",
-    region: { rect: () => controls() && !streamInfo() ? {x:8,y:73,w:304,h:50} : null },
+    region: { rect: () => controls() && !streamInfo() ? {x:8,y:42,w:304,h:52} : null },
     axis: "x",
     onPanStart: contact => setSeekPreview(seekAtX(contact.x, playing()?.seconds ?? 0)),
     onPanMove: contact => setSeekPreview(seekAtX(contact.x, playing()?.seconds ?? 0)),
@@ -561,8 +610,17 @@ function App() {
     onTap: contact => seekTo(seekAtX(contact.x, playing()?.seconds ?? 0)),
   });
 
-  onFrame(() => {
+  onFrame((buttons) => {
     frame++;
+    const ay = analogY();
+    const heldDir = (buttons & BTN.UP) || ay < -0.55 ? -1 : (buttons & BTN.DOWN) || ay > 0.55 ? 1 : 0;
+    if (heldDir !== 0 && heldDir === navDir) {
+      navHold++;
+      if (navHold >= 16 && (navHold - 16) % 5 === 0) stepVertical(heldDir);
+    } else {
+      navDir = heldDir;
+      navHold = heldDir !== 0 && Math.abs(ay) > 0.55 && !(buttons & (BTN.UP | BTN.DOWN)) ? 16 : 0;
+    }
     if (!dragging && !controls() && !detail()) {
       if (Math.abs(velocity) > 0.15) {
         const next = clampScroll(scrollY() + velocity);
@@ -634,6 +692,7 @@ function App() {
           setUsername(hello.username || "");
           setAuthenticated(hello.authenticated);
           setNewModel(hello.newModel);
+          setHardwareDecode(Boolean(hello.hardware));
           setPassword("");
           if (hello.authenticated) home("libraries");
           else {
@@ -646,7 +705,7 @@ function App() {
         setMessage("Service unavailable.");
       }
     }
-    if (frame % 6 === 0 && playing()) {
+    if (frame % (controls() ? 6 : 30) === 0 && playing()) {
       const old = status();
       const currentStatus = player.status() as PlayerStatus;
       setStatus(currentStatus);
@@ -688,7 +747,7 @@ function App() {
   };
 
   return <>
-    <View class="relative w-full h-full bg-[#f0f1f4] overflow-hidden">
+    <View class={`relative w-full h-full ${UI.canvas} overflow-hidden`}>
       <Show when={playing()}><View class="absolute inset-0 bg-black" /></Show>
       <Image
         nodeRef={(node) => { plane = node; getOps().setImage(node.id, player.texture()); }}
@@ -696,48 +755,54 @@ function App() {
         style={{ insetL: videoRect().x, insetT: videoRect().y, width: videoRect().w,
           height: videoRect().h, opacity: playing() && (status()?.presentedFrames ?? 0) > 0 ? 1 : 0 }}
       />
-      <View
-        class="absolute left-[12] top-[12] right-[12] bottom-[18] rounded-xl bg-white border border-[#c4cbd1]"
-        style={{ opacity: !playing() && screen() === "setup" ? 1 : 0 }}
-      >
-          <Text class="absolute left-[14] top-[14] text-sm text-[#75409b] font-bold">Jellyfin3DS</Text>
-          <Text class="absolute left-[14] top-[42] text-lg text-[#3c4954] font-bold">Account</Text>
-          <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#aa5cc3]" />
-          <Text class="absolute left-[14] top-[94] text-base text-[#3c4954]">Sign in below.</Text>
-      </View>
+      <Show when={!playing() && screen() === "setup"}>
+        <View class={`absolute left-[12] top-[12] right-[12] bottom-[18] ${UI.card}`}>
+          <Text class={`absolute left-[14] top-[14] text-sm ${UI.textAccent} font-bold`}>Jellyfin3DS</Text>
+          <Text class={`absolute right-[14] top-[14] text-xs ${UI.textMuted}`}>{newModel() ? "New 3DS · 804 MHz" : "Nintendo 3DS"}</Text>
+          <Text class={`absolute left-[14] top-[42] text-lg ${UI.textPrimary} font-bold`}>Account</Text>
+          <View class="absolute left-[14] top-[77] h-[2] w-[88] bg-[#a855f7]" />
+          <Text class={`absolute left-[14] top-[94] text-base ${UI.textSecondary}`}>Sign in below to connect to your Jellyfin server.</Text>
+          <Text class={`absolute left-[14] bottom-[16] text-xs ${UI.textMuted}`}>
+            {server().startsWith("https://") ? "TLS certificate verification enabled" : "LAN HTTP mode"}
+          </Text>
+        </View>
+      </Show>
       <Show when={!playing() && screen() === "browser"}>
-        <View class="absolute left-[12] top-[8] right-[12] bottom-[10] rounded-xl bg-white border border-[#c4cbd1]">
-          <View class="absolute left-[10] top-[10] w-[178] h-[100] rounded-lg bg-[#edf3f6] overflow-hidden items-center justify-center">
-            <Text class="text-xs text-[#8c9ba6]">{art() ? "" : artError() || selected()?.type || "Library"}</Text>
+        <View class={`absolute left-[12] top-[8] right-[12] bottom-[10] ${UI.card}`}>
+          <View class="absolute left-[10] top-[10] w-[178] h-[100] rounded-lg bg-[#1f283a] overflow-hidden items-center justify-center">
+            <Text class={`text-xs ${UI.textMuted}`}>{art() ? "" : artError() || selected()?.type || "Library"}</Text>
             <Image nodeRef={node => { artPlane = node; if (art()) getOps().setImage(node.id, art()!.handle); }}
               class="absolute top-0" style={{insetL:0,width:178,height:178,opacity:art()?1:0}} />
           </View>
-          <Text class="absolute left-[198] right-[10] top-[12] text-sm text-[#3c4954] font-bold">{label(selected()?.name ?? "Library")}</Text>
-          <Text class="absolute left-[198] right-[10] top-[52] text-xs text-[#75409b]">{subtitle().slice(0, 60)}</Text>
-          <Text class="absolute left-[198] right-[10] top-[88] text-xs text-[#8c9ba6]">{selected()?.played ? "Watched" : selected()?.resume ? `Resume ${time(selected()!.resume)}` : selected()?.type ?? ""}</Text>
-          <View class="absolute left-[10] right-[10] top-[118] h-[1] bg-[#edf3f6]" />
-          <Text class="absolute left-[10] right-[10] top-[125] text-xs text-[#6a7680]">{overview().length > 210 ? overview().slice(0, 207) + "..." : overview()}</Text>
+          <Text class={`absolute left-[198] right-[10] top-[12] text-sm ${UI.textPrimary} font-bold`}>{label(selected()?.name ?? "Library", 28)}</Text>
+          <Text class={`absolute left-[198] right-[10] top-[52] text-xs ${UI.textAccent}`}>{subtitle().slice(0, 60)}</Text>
+          <Text class={`absolute left-[198] right-[10] top-[88] text-xs ${UI.textMuted}`}>{selected()?.played ? "Watched" : selected()?.resume ? `Resume ${time(selected()!.resume)}` : selected()?.type ?? ""}</Text>
+          <View class="absolute left-[10] right-[10] top-[118] h-[1] bg-[#2a3448]" />
+          <Text class={`absolute left-[10] right-[10] top-[125] text-xs ${UI.textSecondary}`}>{overview().length > 210 ? overview().slice(0, 207) + "..." : overview()}</Text>
         </View>
       </Show>
       <Show when={screen() === "boot"}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-2">
-          <Text class="text-lg text-[#3c4954] font-bold">Jellyfin3DS</Text>
-          <View class="w-[64] h-[48] rounded-xl bg-[#aa5cc3] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
-          <Text class="text-xs text-[#6a7680]">Starting…</Text>
+          <Text class={`text-lg ${UI.textPrimary} font-bold`}>Jellyfin3DS</Text>
+          <View class="w-[64] h-[48] rounded-xl bg-[#a855f7] items-center justify-center"><Text class="text-lg text-white font-bold">Play</Text></View>
+          <Text class={`text-xs ${UI.textMuted}`}>Starting…</Text>
         </View>
       </Show>
       <Show when={message() && message() !== "Loading…" && (!playing() || status()?.phase === "error")}>
-        <View class="absolute left-[20] right-[20] bottom-[30] p-[8] rounded-lg bg-[#fff8df] border border-[#dacb99]"><Text class="text-xs text-[#6a5b36]">{message()}</Text></View>
+        <View class="absolute left-[20] right-[20] bottom-[30] p-[8] rounded-lg bg-[#2b2210] border border-[#eab308]"><Text class="text-xs text-[#fef08a]">{message()}</Text></View>
       </Show>
       <Show when={playing() && !(status()?.presentedFrames)}>
         <View class="absolute inset-0 items-center justify-center flex-col gap-1">
-          <Text class="text-sm text-[#dfc5ed] font-bold">{label(playing()?.name ?? "")}</Text>
-          <Text class="text-base text-white">{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text>
+          <Text class={`text-sm ${UI.textAccent} font-bold`}>{label(playing()?.name ?? "")}</Text>
+          <Text class={`text-base ${UI.textPrimary}`}>{status()?.phase === "error" ? "Playback unavailable" : "Buffering…"}</Text>
+          <Show when={profile()}>
+            <Text class={`text-xs ${UI.textAccent}`}>{profile()!.maxWidth}×{profile()!.maxHeight} · {profile()!.maxFps} fps · {profile()!.hardware ? "MVD" : "CPU"}</Text>
+          </Show>
         </View>
       </Show>
     </View>
 
-    <AuxiliarySurface>{() => <View class="relative w-full h-full bg-[#f5f5f5] overflow-hidden">
+    <AuxiliarySurface>{() => <View class={`relative w-full h-full ${controls() ? UI.playerCanvas : UI.canvas} overflow-hidden`}>
       <Show when={screen() === "setup"}>
         <SetupView
           setupField={setupField()}
@@ -750,7 +815,9 @@ function App() {
       </Show>
 
       <Show when={screen() === "browser"}>
-        <NavBar mode={where().mode} />
+        <Show when={!controls()}>
+          <NavBar mode={where().mode} />
+        </Show>
         <Show when={!controls() && !detail()}>
           <BrowserListView
             title={history.length ? `${history[history.length - 1].location.title} › ${where().title}` : where().title}
@@ -780,17 +847,22 @@ function App() {
             phase={status()?.phase ?? "Opening"}
             videoSize={videoSize()}
             displayFps={status()?.displayFps}
+            decodeFps={status()?.decodeFps}
             profile={profile()}
             playbackSeconds={playbackSeconds()}
             durationSeconds={durationSeconds()}
-            controlFocus={controlFocus()}
+            seeking={seekPreview() !== undefined}
             infoFocus={infoFocus()}
             quality={quality()}
+            hardwareDecode={hardwareDecode()}
+            newModel={newModel()}
             volume={volume()}
             hasNext={Boolean(nextItem())}
           />
         </Show>
-        <Text class="absolute left-[6] top-[223] text-xs text-[#6a7680]">{label(message() || (controls() ? streamInfo() ? "B: Player · Left/Right: Volume" : "B: Browse · Left/Right: Seek" : "A: Open   X: Search"))}</Text>
+        <Text class={`absolute left-[6] top-[223] text-xs ${UI.textMuted}`}>
+          {label(message() || (controls() ? streamInfo() ? "Up/Down: Select · A/L/R: Change · B: Back" : "A: Play/Pause · L/R: ±30s · Up/Down: Vol · X: Stream" : "A: Open · L/R: Tabs · X: Search · Y: Continue"), 48)}
+        </Text>
       </Show>
 
     </View>}</AuxiliarySurface>

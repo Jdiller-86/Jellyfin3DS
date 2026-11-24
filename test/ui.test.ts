@@ -28,9 +28,19 @@ test("scroll clamping and touch hitboxes match screen layouts", () => {
   expect(hitTestDetail(100, 190, true, true)).toBe("back");
   expect(hitTestDetail(220, 190, true, true)).toBe("nowPlaying");
 
-  expect(hitTestControls(56, 195, false)).toBe("stream");
-  expect(hitTestControls(160, 150, false)).toBe("pause");
-  expect(hitTestControls(266, 164, true)).toBe("quality");
+  expect(hitTestControls(36, 120, false)).toBe("seekBack30");
+  expect(hitTestControls(96, 120, false)).toBe("seekBack");
+  expect(hitTestControls(160, 120, false)).toBe("pause");
+  expect(hitTestControls(220, 120, false)).toBe("seekFwd");
+  expect(hitTestControls(280, 120, false)).toBe("seekFwd30");
+  expect(hitTestControls(80, 164, false)).toBe("volDown");
+  expect(hitTestControls(240, 164, false)).toBe("volUp");
+  expect(hitTestControls(56, 200, false)).toBe("stream");
+  expect(hitTestControls(160, 200, false)).toBe("browse");
+  expect(hitTestControls(266, 200, false)).toBe("stop");
+  expect(hitTestControls(266, 120, true)).toBe("quality");
+  expect(hitTestControls(266, 160, true)).toBe("decoder");
   expect(hitTestControls(80, 200, true)).toBe("volDown");
   expect(hitTestControls(240, 200, true)).toBe("volUp");
+  expect(hitTestControls(280, 16, true)).toBe("closeStream");
 });

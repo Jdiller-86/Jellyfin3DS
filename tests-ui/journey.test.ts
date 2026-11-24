@@ -44,14 +44,14 @@ test("compiled direct client browses, plays, pauses, seeks, searches and restart
  press(0x2000);press(0x40);await capture("detail-focus");press(0x2000); // Start over.
  expect(opened).toBe(1);expect(position).toBe(0);await capture("player");
  const playsBeforeSeek=commands.filter(c=>c.t==="play").length;
- step(2,24,103);step(1,70,103);step(1,110,103);step(1,160,103);step();
+ step(2,16,72);step(1,70,72);step(1,110,72);step(1,160,72);step();
  expect(commands.filter(c=>c.t==="play").length).toBe(playsBeforeSeek+1);
  expect(position).toBe(300);await capture("player-seek");
  press(0x8);expect(phase).toBe("paused");press(0x8);expect(phase).toBe("playing");
- press(0x200);expect(opened).toBe(3);expect(position).toBe(310);
- tap(56,195);await capture("stream-info");
- tap(266,164);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("high");expect(opened).toBe(4);
- await capture("stream-high");tap(266,164);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("native");expect(commands.filter(c=>c.t==="play").at(-1).seconds).toBe(310);expect(opened).toBe(5);await capture("stream-native");press(0x4000);
+ press(0x200);expect(opened).toBe(3);expect(position).toBe(330);
+ tap(56,200);await capture("stream-info");
+ tap(266,120);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("high");expect(opened).toBe(4);
+ await capture("stream-high");tap(266,120);expect(commands.filter(c=>c.t==="play").at(-1).quality).toBe("native");expect(commands.filter(c=>c.t==="play").at(-1).seconds).toBe(330);expect(opened).toBe(5);await capture("stream-native");press(0x4000);
  press(0x4000);await capture("playing-browse");
  tap(225,205);press(0x2000);expect(phase).toBe("paused");press(0x2000);expect(phase).toBe("playing");
  expect(opened).toBe(5);press(0x4000); // Back to browsing without reopening playback.

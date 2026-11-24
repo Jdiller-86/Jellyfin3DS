@@ -5,8 +5,15 @@
 static const void *converted;
 static size_t calls, lengths[32], renders;
 static Result slice_status = MVD_STATUS_FRAMEREADY;
+static int busy_renders = 0;
 void *linearAlloc(size_t n) { return malloc(n); }
+void *linearMemAlign(size_t n, size_t align) {
+    void *p = NULL;
+    if (posix_memalign(&p, align < sizeof(void*) ? sizeof(void*) : align, n) != 0) return NULL;
+    return p;
+}
 void linearFree(void *p) { free(p); }
+void svcSleepThread(int64_t ns) { (void)ns; }
 void *osConvertOldLINEARMemToNew(const void *p) { converted=p; return (void *)((uintptr_t)p+0x10000000); }
 u32 osConvertVirtToPhys(const void *p) { return (u32)(uintptr_t)p; }
 Result mvdstdInit(int a,int b,int c,int d,void *e) { return 0; }
@@ -15,7 +22,7 @@ void GSPGPU_FlushDataCache(const void *p,size_t n) {}
 void GSPGPU_InvalidateDataCache(const void *p,size_t n) {}
 void log_write(const char *fmt,...) {}
 Result mvdstdProcessVideoFrame(void *p,size_t n,u32 f,void *o) {
-    assert(((uintptr_t)p & 3) == 0);
+    assert(((uintptr_t)p & 0xfff) == 0);
     assert((uintptr_t)p==(uintptr_t)converted+0x10000000);
     const unsigned char *bytes=converted;
     assert(n>=4 && bytes[0]==0 && bytes[1]==0 && bytes[2]==1);
@@ -24,7 +31,7 @@ Result mvdstdProcessVideoFrame(void *p,size_t n,u32 f,void *o) {
 }
 void mvdstdGenerateDefaultConfig(MVDSTD_Config *c,int a,int b,int d,int e,void *f,void *g,void *h) { memset(c,0,sizeof *c); }
 Result MVDSTD_SetConfig(MVDSTD_Config *c) { assert(!"Premature configuration before frame ready"); return MVD_STATUS_OK; }
-Result mvdstdRenderVideoFrame(MVDSTD_Config *c,bool wait) { assert(slice_status==MVD_STATUS_FRAMEREADY); renders++; return MVD_STATUS_OK; }
+Result mvdstdRenderVideoFrame(MVDSTD_Config *c,bool wait) { assert(slice_status==MVD_STATUS_FRAMEREADY); if (busy_renders > 0) { busy_renders--; return MVD_STATUS_BUSY; } renders++; return MVD_STATUS_OK; }
 #include "../native/mvd_decode.c"
 int main(void) {
     mvd_ctx_t ctx;
@@ -45,6 +52,14 @@ int main(void) {
     size_t prior=calls; assert(!mvd_decode_packet(&ctx,delimiter,sizeof delimiter)); assert(calls==prior);
     const uint8_t corrupt[]={0xff,0xff,0xff,0xff,0x65};
     assert(!mvd_decode_packet(&ctx,corrupt,sizeof corrupt)); assert(calls==prior);
+    /* Leading-zero padded Annex B packet + MVD_STATUS_BUSY retry */
+    busy_renders = 2;
+    const uint8_t padded[]={0,0,0,0,1,0x65,0xcc};
+    assert(mvd_decode_packet(&ctx,padded,sizeof padded));
+    assert(busy_renders == 0 && renders == 2);
+    /* 2-SPS + 1-PPS AVCC extradata */
+    const uint8_t avcc[]={1,0x42,0,0x1f,0xff,0xe2, 0,2,0x67,0x11, 0,2,0x67,0x22, 1, 0,2,0x68,0x33};
+    assert(mvd_send_sps_pps(&ctx,avcc,sizeof avcc));
     free(large);mvd_cleanup(&ctx);
     assert(!mvd_init(&ctx,4096,4096));
     return 0;

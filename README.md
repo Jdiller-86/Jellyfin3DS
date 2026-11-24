@@ -1,7 +1,7 @@
 # Jellyfin3DS
 
 [![Build 3DS homebrew](https://github.com/Jdiller-86/Jellyfin3DS/actions/workflows/build.yml/badge.svg)](https://github.com/Jdiller-86/Jellyfin3DS/actions/workflows/build.yml)
-[![Release v0.3.4](https://img.shields.io/github/v/release/Jdiller-86/Jellyfin3DS?include_prereleases&label=release)](https://github.com/Jdiller-86/Jellyfin3DS/releases/tag/v0.3.4)
+[![Release v0.3.5](https://img.shields.io/github/v/release/Jdiller-86/Jellyfin3DS?include_prereleases&label=release)](https://github.com/Jdiller-86/Jellyfin3DS/releases/tag/v0.3.5)
 [![Target](https://img.shields.io/badge/target-Nintendo%203DS%20%2F%20New%203DS-ce181e)](INSTALL.md)
 [![License](https://img.shields.io/badge/license-MIT%20%2F%20GPL--3.0-blue)](LICENSE.md)
 
@@ -29,7 +29,7 @@ Select a preset during playback via **Now playing → Stream → Quality**.
 | :--- | :--- | :--- | :--- | :--- |
 | **Original 3DS / 2DS** | Software (FFmpeg) | `256×144` · 12 fps · ≤192 kb/s | `256×144` · 12 fps · ≤320 kb/s | — |
 | **New 3DS / New 2DS** | Software (default) | `256×144` · 12 fps · ≤192 kb/s | `256×144` · 12 fps · ≤320 kb/s | `400×240` · 30 fps · ≤850 kb/s |
-| **New 3DS / New 2DS** | Experimental MVD (hold **R** on launch) | `400×240` · 24 fps · ≤472 kb/s | `400×240` · 24 fps · ≤700 kb/s | `400×240` · 60 fps · ≤1200 kb/s |
+| **New 3DS / New 2DS** | Hardware MVD (Stream → Decoder) | `400×240` · 24 fps · ≤472 kb/s | `400×240` · 24 fps · ≤700 kb/s | `400×240` · 30 fps · ≤900 kb/s |
 
 > [!NOTE]
 > Software decoding is the default on all models. Holding **R** at launch on a New 3DS opts into the experimental hardware MVD decoder; holding **L** always forces software decoding. The Stream panel displays the actual decoded size and measured presented FPS separately from the requested caps.
@@ -40,11 +40,11 @@ Select a preset during playback via **Now playing → Stream → Quality**.
 
 ### Option 1: Install with FBI (QR Code)
 
-Open **FBI → Remote Install → Scan QR Code** on your 3DS and scan the code below to install `Jellyfin3DS.cia` from the `v0.3.4` release:
+Open **FBI → Remote Install → Scan QR Code** on your 3DS and scan the code below to install `Jellyfin3DS.cia` from the `v0.3.5` release:
 
-<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.4" width="280"></a>
+<a href="https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.5/Jellyfin3DS.cia"><img src="assets/fbi-install.png" alt="FBI QR code for Jellyfin3DS v0.3.5" width="280"></a>
 
-Direct CIA URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.4/Jellyfin3DS.cia>
+Direct CIA URL: <https://github.com/Jdiller-86/Jellyfin3DS/releases/download/v0.3.5/Jellyfin3DS.cia>
 
 *FBI requires anonymous access to the release asset. If the repository is private, use the manual install below.*
 
