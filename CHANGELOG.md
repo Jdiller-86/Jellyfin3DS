@@ -15,6 +15,12 @@ All notable changes to **Jellyfin3DS** are documented in this file.
 - Removed unused write-only tracking fields (`PreparedStream.generation`, `offload_measure` counters).
 - Added native C unit tests for `native/offload_util.h` (`test/offload_util.c`) and `j3ds_yuv420p_to_rgb565` (`test/rgb565.c`).
 
+## [0.3.7] - 2026-11-25
+
+- The CIA now declares kernel release 2.44 for New 3DS hardware decoding. The client checks the running linear-memory layout before initializing MVD and handles initialization failures.
+- Hardware playback requests H.264 transcoding and renders ready frames before submitting the next NAL unit. Software fallback reuses the open stream.
+- Added CIA capability checks, sanitized transport tests and a 192-frame packet replay. Physical-console playback remains unverified.
+
 ## [0.3.6] - 2026-11-24
 
 - **MVD Hardware Decode Crash Fix:** Removed worker-thread `C3D_SyncDisplayTransfer` from `convert_thread_func` (Citro3D GX queue is main-thread-only and `GX_DisplayTransfer` cannot tile `400×240` into `512×256`), restoring safe `tile_row_morton` tiling for hardware MVD playback.

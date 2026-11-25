@@ -23,7 +23,7 @@ export function SetupView(props: {
   return (
     <>
       <View class="absolute left-0 top-0 w-full h-[32] items-center justify-center bg-[#151b26] border border-[#283246]">
-        <Text class="text-sm text-[#f1f5f9] font-bold">Account · v0.3.6</Text>
+        <Text class="text-sm text-[#f1f5f9] font-bold">Account · v0.3.7</Text>
         <View class="absolute left-0 right-0 bottom-0 h-[2] bg-[#a855f7]" />
       </View>
       <View class={props.setupField === 0 ? "absolute left-[8] right-[8] top-[43] h-[39] bg-[#2c1f42] border-2 border-[#c084fc] rounded-lg" : "absolute left-[8] right-[8] top-[43] h-[39] bg-[#1a2232] border border-[#2e3a52] rounded-lg"}>

@@ -110,3 +110,81 @@ quality switch in the two-screen UI journey and cross-compiles both install file
 Performance at 400×240, the 60 fps MVD service, server output cadence and audio
 sync have not been verified on a real New 3DS. A quality request is a ceiling,
 not proof of the effective video resolution or frame rate.
+
+## New 3DS MVD audit on the v0.3.6 checkout
+
+The previous diagnostic CIA contained ARM11 release-kernel descriptor
+`0xFC000221` (2.33). The devkitPro MVD example documents a minimum of 2.44.
+Both ThirdTube and Video_player_for_3DS specify 2.44 in their application
+descriptors. Azahar's process memory implementation independently places the
+linear heap in the old address range for versions below 0x22C. Luma's
+homebrew loader also documents this cutoff. The CIA build now requests 2.44.
+The verifier reads the packed NCCH and checks both `0xFC00022C` and the
+`mvd:STD` access-list entry. It rejected the previous diagnostic CIA.
+
+The transcript identifies an ARM11 service break inside process `mvd`, PC
+`00119ABC`. The words `30E0E000` and `20E0E000` are consistent with the new
+linear virtual and physical addresses of the same allocation. libctru sends
+both addresses on NAL submission. Computing a virtual alias does not create
+a mapping. This explains how both addresses could look aligned and plausible
+while the client was running with the old layout. The transcript does not
+identify the installed binary, launch format, service command, assertion or
+contents of the buffer. A .3dsx runs with its loader's process capabilities.
+
+### Implementation and reference checks
+
+- Check a real linear allocation before opening MVD. Fall back on legacy
+  layouts. Accept only zero from initialization. Keep H.264 hardware opt-in.
+- Request video transcoding for the hardware profile and check the codec
+  reported by the demuxer before opening MVD. Jellyfin's video endpoint
+  allows stream copy by default. Software fallback after MVD initialization
+  failure can reuse the open demuxer and buffered packets.
+- Submit supported H.264 NAL units from the aligned allocation with a
+  three-byte start code. Render each frame-ready result before submitting
+  the next NAL. Poll with libctru's nonblocking render call so the existing
+  retry limit applies when the service replies busy. A synchronous IPC call
+  itself still depends on the service returning.
+- The default work buffer and 16-pixel padded output dimensions have
+  precedent in the references. ThirdTube and FourthTube duplicate the first
+  submission in their playback paths. The devkitPro example does not require
+  this, so the client submits each unit once.
+- After successful rendering, invalidate the output cache, copy into the
+  frame queue, and pass tiled texture data to the main thread. Normal stop
+  joins the workers before releasing their buffers and closing MVD.
+
+Sources used for these comparisons include the
+[devkitPro example](https://github.com/devkitPro/3ds-examples/tree/be2001fee08cf8ec7d3366e095e83f6f75da8942/mvd),
+[libctru MVD implementation](https://github.com/devkitPro/libctru/blob/v2.7.0/libctru/source/services/mvd.c),
+[libctru address conversion](https://github.com/devkitPro/libctru/blob/v2.7.0/libctru/source/os.c),
+[Luma homebrew loader](https://github.com/LumaTeam/Luma3DS/blob/c7790ee1d79574471f948e1078bb6f2c5c620e9b/sysmodules/loader/source/hbldr.c),
+[Azahar process memory](https://github.com/azahar-emu/azahar/blob/master/src/core/hle/kernel/process.cpp),
+[ThirdTube](https://github.com/windows-server-2003/ThirdTube/tree/dc65af8512826d0f3af8e9c2a259403a010d812a),
+[FourthTube](https://github.com/erievs/FourthTube/tree/6d8bcb286e0423531e98819a3ad9129b833386d9),
+[Video_player_for_3DS](https://github.com/Core-2-Extreme/Video_player_for_3DS/tree/87cb1caa9261e611f9583a9c41f3e8120a6a1864),
+and the [Jellyfin video endpoint](https://github.com/jellyfin/jellyfin/blob/6b786b36eed49bf83860d9b652b96f475aeb2668/Jellyfin.Api/Controllers/VideosController.cs).
+
+### Reproducing offline validation
+
+Run `bun run test` for native service-contract and unit checks. The MVD harness
+uses ASan and UBSan and covers legacy layout rejection before service IPC,
+positive initialization failures, aligned submissions, parameter sets,
+render gating, multiple ready results in one packet, busy retries and timeout.
+Run `python3 test/mvd-replay.py` with FFmpeg, ffprobe and libx264 available.
+It creates four 48-frame baseline H.264 MPEG-TS clips, demuxes the packets,
+captures the byte stream submitted by the C decoder at the mocked IPC call,
+and compares every independently decoded frame hash with the original.
+All 192 hashes matched, including 400×224 four-slice and 320×180 two-slice
+video. The test validates input framing. Hardware status codes, DMA, output
+colors, audio sync and real playback timing require a console. Azahar's
+public MVD service table registers null handlers for Initialize and
+ProcessNALUnit, so its normal high-level emulation cannot validate this
+service path. [Azahar MVD service](https://github.com/azahar-emu/azahar/blob/master/src/core/hle/service/mvd/mvd_std.cpp)
+
+For a hardware comparison, install the locally built CIA from `dist/install/cias`.
+Use the QR supplied with v0.3.7 to select this build. Preserve any existing log
+before launch. Record the launch format and whether the log shows
+`MVD heap probe ... layout=new`, `DEC: MVD OK`, the first submit/return
+pairs and the first render/return pair. Check visible moving video and sound,
+then seek, stop and replay. If the service breaks, preserve the log and ARM11
+dump before relaunching. A process address in the system module needs matching
+system-module code to resolve its internal call site.

@@ -25,12 +25,12 @@ static void software_decode_thread(void)
     AVFrame *frame = NULL;
     u16 *pixels = NULL;
     const char *error = NULL;
-    while (!s_vp.stop_requested &&
+    while (!s_vp.demux.fmt_ctx && !s_vp.stop_requested &&
            __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE) < PREFETCH_BYTES &&
            !__atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE))
         svcSleepThread(10000000LL);
     if (s_vp.stop_requested) return;
-    if (!demux_init(&s_vp.demux)) { error = "Could not open the video stream"; goto done; }
+    if (!s_vp.demux.fmt_ctx && !demux_init(&s_vp.demux)) { error = "Could not open the video stream"; goto done; }
     int width = s_vp.demux.video_width, height = s_vp.demux.video_height;
     int max_width = direct_media_is_new_model() ? 400 : 256;
     int max_height = direct_media_is_new_model() ? 240 : 144;

@@ -72,6 +72,13 @@ export function transformVideoSource(source: string): string {
     "static void fq_cleanup(frame_queue_t *fq)\n{\n    if (fq->popped.data) linearFree(fq->popped.data);\n    fq->popped.data = NULL;", "queue scratch cleanup");
   source = replaceOne(source, "    queued_frame_t *f = &fq->frames[fq->read_idx];\n    fq->read_idx",
     "    queued_frame_t *f = &fq->frames[fq->read_idx];\n    if (!fq->popped.data) { LightLock_Unlock(&fq->lock); return NULL; }\n    u8 *owned = fq->popped.data;\n    fq->popped = *f;\n    fq->popped.data = owned;\n    memcpy(owned, f->data, f->width * f->height * 2);\n    f = &fq->popped;\n    fq->read_idx", "queue pop owns pixels");
+  source = replaceOne(source, "    /* Init MVD */", `    AVFormatContext *format = s_vp.demux.fmt_ctx;
+    if (format->streams[s_vp.demux.video_stream_idx]->codecpar->codec_id != AV_CODEC_ID_H264) {
+        snprintf(s_vp.error_msg, sizeof s_vp.error_msg, "Hardware decoder requires H.264");
+        s_vp.state = VIDEO_ERROR;
+        return;
+    }
+    /* Init MVD */`, "MVD codec check");
   source = replaceOne(source, "    /* Init MVD */",
     "    if (s_vp.demux.video_width <= 0 || s_vp.demux.video_width > 400 ||\n        s_vp.demux.video_height <= 0 || s_vp.demux.video_height > 240) {\n        snprintf(s_vp.error_msg, sizeof s_vp.error_msg, \"Server exceeded the video size limit\");\n        s_vp.state = VIDEO_ERROR;\n        return;\n    }\n    /* Init MVD */", "bounded hardware frames");
   source = replaceOne(source, "#include <3ds.h>", "#include <3ds.h>\n#include <errno.h>\n#include \"direct_media.h\"", "model selection");
@@ -139,7 +146,7 @@ export function transformVideoSource(source: string): string {
     "    LightLock_Init(&s_vp.tex_lock);\n    LightEvent_Init(&s_vp.tex_consumed, RESET_ONESHOT);", "GPU frame event init");
   source = replaceOne(source,
     `    if (!mvd_init(&s_vp.mvd, s_vp.demux.video_width, s_vp.demux.video_height)) {\n        log_write("DEC: mvd_init FAILED");\n        snprintf(s_vp.error_msg, sizeof(s_vp.error_msg), "MVD init failed (New 3DS?)");\n        s_vp.state = VIDEO_ERROR;\n        demux_cleanup(&s_vp.demux);\n        return;\n    }`,
-    `    if (!mvd_init(&s_vp.mvd, s_vp.demux.video_width, s_vp.demux.video_height)) {\n        log_write("DEC: MVD init failed, falling back to software");\n        demux_cleanup(&s_vp.demux);\n        software_decode_thread();\n        return;\n    }`,
+    `    if (!mvd_init(&s_vp.mvd, s_vp.demux.video_width, s_vp.demux.video_height)) {\n        log_write("DEC: MVD init failed, falling back to software");\n        software_decode_thread();\n        return;\n    }`,
     "MVD init fallback");
   source = replaceOne(source,
     `                int dst_row = 0, y_count = 0;\n                for (int y = 0; y < f->height; y++) {\n                    const u8 *row = f->data + y * f->width * 2;\n                    tile_row_morton(tex_data, dst_row, row, f->width);\n                    dst_row += s_inc_y[y_count++];\n                }`,
@@ -154,7 +161,7 @@ export function transformMakefile(source: string): string {
   source = replaceOne(
     source,
     "  -I$(DEVKITPRO)/libctru/include",
-    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.6\"' -DCJSON_NESTING_LIMIT=32`,
+    `  -I$(DEVKITPRO)/libctru/include \\\n  -I$(SOURCE) -I/out/native -I/out/.pocket/native/generated/include \\\n  -I/out/vendor/jellyfin-3ds/include -I/out/vendor/jellyfin-3ds/include/api \\\n  -I/out/vendor/jellyfin-3ds/lib/ffmpeg/include -I/out/.pocket/native/portlibs/include \\\n  -DJFIN_VERSION='\"0.3.7\"' -DCJSON_NESTING_LIMIT=32`,
     "native includes",
   );
   source = replaceOne(
@@ -197,15 +204,16 @@ export function transformMakefile(source: string): string {
   source = source.replace("$(RSF) $(CIA_STAMP)\n", "$(RSF) $(CIA_STAMP) /out/.pocket/banner/banner.bnr\n");
   // Update both the metadata recipe and its cache stamp.
   if(source.split('"$$POCKETJS_SMDH_DESC"').length !== 3) throw new Error("SMDH description seam changed");
-  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.6"');
+  source = source.replaceAll('"$$POCKETJS_SMDH_DESC"', '"Jellyfin client v0.3.7"');
   // FFmpeg is built with 32-bit enums. Its public structs must use the same ABI.
   source += "\n$(BUILD)/video_player.o $(BUILD)/ffmpeg_demux.o: CFLAGS += -fno-short-enums\n";
   return source;
 }
 
 export function transformRsf(source: string): string {
+  source = replaceOne(source, 'ReleaseKernelMinor            : "33"', 'ReleaseKernelMinor            : "44"', "MVD linear memory layout");
   source = replaceOne(source, "  SystemModeExt                 : 124MB", "  SystemModeExt                 : 124MB\n  CpuSpeed                      : 804MHz\n  EnableL2Cache                 : true", "New 3DS speedup");
-  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 14", "CIA revision");
+  source = replaceOne(source, "  RemasterVersion: 0", "  RemasterVersion: 15", "CIA revision");
   return replaceOne(source, "  InterruptNumbers:",
     "  # NDSP accesses DSP RAM directly, including its frame counter.\n  IORegisterMapping:\n   - 1ff00000-1ff7ffff\n  # APT captures framebuffers on the CPU before opening the OS keyboard.\n  MemoryMapping:\n   - 1f000000-1f5fffff:r\n  InterruptNumbers:", "DSP RAM mapping");
 }

@@ -74,25 +74,25 @@ jobs:
         with:
           name: Jellyfin3DS-install
           path: dist/install
-      - name: Publish the FBI-installable v0.3.6 prerelease
+      - name: Publish the FBI-installable v0.3.7 prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          release_notes='v0.3.6: fix MVD hardware-decoding crash by removing worker-thread C3D_SyncDisplayTransfer and keeping thread-safe tile_row_morton.'
-          if gh release view v0.3.6 >/dev/null 2>&1; then
-            echo 'v0.3.6 already exists; versioned releases are immutable. Bump the version to publish another build.'
+          release_notes='The installable CIA now requests the 2.44 linear-memory layout required by MVD. Hardware mode checks the running memory layout and requests H.264 transcoding. Host tests and packet replay passed. Playback on a physical New 3DS still needs confirmation.'
+          if gh release view v0.3.7 >/dev/null 2>&1; then
+            echo 'v0.3.7 already exists; versioned releases are immutable. Bump the version to publish another build.'
             exit 0
           fi
-          gh release create v0.3.6 \
+          gh release create v0.3.7 \
             dist/install/cias/Jellyfin3DS.cia \
             dist/install/3ds/Jellyfin3DS/Jellyfin3DS.3dsx \
             dist/install/SHA256SUMS \
             dist/install/INSTALL.md \
             dist/install/FBI-QR.png \
             --prerelease --target "$RELEASE_COMMIT" \
-            --title 'Jellyfin3DS v0.3.6' --notes "$release_notes"
+            --title 'Jellyfin3DS v0.3.7' --notes "$release_notes"
           verify_dir="$(mktemp -d)"
-          gh release download v0.3.6 --pattern Jellyfin3DS.cia --dir "$verify_dir"
+          gh release download v0.3.7 --pattern Jellyfin3DS.cia --dir "$verify_dir"
           cmp dist/install/cias/Jellyfin3DS.cia "$verify_dir/Jellyfin3DS.cia"

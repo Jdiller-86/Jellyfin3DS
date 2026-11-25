@@ -23,16 +23,31 @@
 
 /* ── Availability check ────────────────────────────────────────────── */
 
-bool mvd_is_available(void)
+/* A .3dsx inherits its launcher's memory layout. Address conversion alone
+ * cannot map an old-layout allocation into the client at its new alias. */
+static bool start_mvd(void)
 {
-    /* Try to init MVD — only succeeds on New 3DS */
+    void *probe = linearAlloc(32);
+    if (!probe) return false;
+    bool new_layout = osConvertOldLINEARMemToNew(probe) == probe;
+    log_write("MVD heap probe va=%08lx layout=%s", (unsigned long)(uintptr_t)probe,
+              new_layout ? "new" : "legacy");
+    linearFree(probe);
+    if (!new_layout) {
+        log_write("MVD unavailable: process uses the legacy linear heap");
+        return false;
+    }
     Result ret = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264,
                             MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE, NULL);
-    if (R_SUCCEEDED(ret)) {
-        mvdstdExit();
-        return true;
-    }
-    return false;
+    if (ret != 0) log_write("MVD init failed status=%08lx", (unsigned long)ret);
+    return ret == 0;
+}
+
+bool mvd_is_available(void)
+{
+    if (!start_mvd()) return false;
+    mvdstdExit();
+    return true;
 }
 
 /* ── Init / Cleanup ────────────────────────────────────────────────── */
@@ -45,11 +60,7 @@ bool mvd_init(mvd_ctx_t *ctx, int width, int height)
     ctx->width = ALIGN16(width);
     ctx->height = ALIGN16(height);
 
-    /* Initialize MVD service */
-    Result ret = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264,
-                            MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE, NULL);
-    if (R_FAILED(ret))
-        return false;
+    if (!start_mvd()) return false;
 
     /* Allocate NAL buffer in 4KB-aligned linear memory (required by MVD DMA) */
     ctx->nal_buf = linearMemAlign(NAL_BUF_SIZE, 0x1000);
@@ -95,6 +106,23 @@ void mvd_cleanup(mvd_ctx_t *ctx)
 
 /* ── SPS/PPS extraction from AVCC extradata ────────────────────────── */
 
+/* Include extradata submissions: a service break can precede the first slice. */
+static Result process_nal(void *mapped, size_t bytes, unsigned type)
+{
+    static unsigned traced;
+    bool trace = traced < 12;
+    if (trace) {
+        ++traced;
+        log_write("MVD submit type=%u bytes=%lu va=%08lx pa=%08lx", type,
+                  (unsigned long)bytes, (unsigned long)(uintptr_t)mapped,
+                  (unsigned long)osConvertVirtToPhys(mapped));
+    }
+    Result ret = mvdstdProcessVideoFrame(mapped, bytes, 0, NULL);
+    if (trace || !MVD_CHECKNALUPROC_SUCCESS(ret))
+        log_write("MVD submit returned %08lx", (unsigned long)ret);
+    return ret;
+}
+
 bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_size)
 {
     if (!ctx->initialized || !extradata || extradata_size < 8 || extradata[0] != 1)
@@ -117,8 +145,8 @@ bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_si
         memcpy(ctx->nal_buf + 3, extradata + offset, sps_len);
         GSPGPU_FlushDataCache(ctx->nal_buf, sps_len + 3);
         void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
-        if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
-        Result ret = mvdstdProcessVideoFrame(mapped, sps_len + 3, 0, NULL);
+        if (mapped != ctx->nal_buf || ((uintptr_t)mapped & 0xfff)) return false;
+        Result ret = process_nal(mapped, sps_len + 3, ctx->nal_buf[3] & 31);
         if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
         offset += sps_len;
     }
@@ -140,8 +168,8 @@ bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_si
         memcpy(ctx->nal_buf + 3, extradata + offset, pps_len);
         GSPGPU_FlushDataCache(ctx->nal_buf, pps_len + 3);
         void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
-        if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
-        Result ret = mvdstdProcessVideoFrame(mapped, pps_len + 3, 0, NULL);
+        if (mapped != ctx->nal_buf || ((uintptr_t)mapped & 0xfff)) return false;
+        Result ret = process_nal(mapped, pps_len + 3, ctx->nal_buf[3] & 31);
         if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
         offset += pps_len;
     }
@@ -152,8 +180,38 @@ bool mvd_send_sps_pps(mvd_ctx_t *ctx, const uint8_t *extradata, int extradata_si
 
 /* ── Decode a video packet ─────────────────────────────────────────── */
 
+/* Consume a ready output before the next NAL changes the decoder state. */
+static bool render_ready_frame(mvd_ctx_t *ctx)
+{
+    void *output = ctx->frame_buf[ctx->frame_write_idx];
+    size_t bytes = (size_t)ctx->width * ctx->height * 2;
+    MVDSTD_Config config;
+    mvdstdGenerateDefaultConfig(&config, ctx->width, ctx->height,
+                                ctx->width, ctx->height, NULL, output, NULL);
+    GSPGPU_FlushDataCache(output, bytes);
+    static unsigned traced;
+    bool trace = traced < 5;
+    if (trace) {
+        ++traced;
+        log_write("MVD render begin %dx%d", ctx->width, ctx->height);
+    }
+    Result ret;
+    for (int tries = 0; tries < 50; ++tries) {
+        ret = mvdstdRenderVideoFrame(&config, false);
+        if (ret != MVD_STATUS_BUSY) break;
+        svcSleepThread(500000LL);
+    }
+    if (trace || ret != MVD_STATUS_OK)
+        log_write("MVD render returned %08lx", (unsigned long)ret);
+    if (ret != MVD_STATUS_OK) return false;
+    GSPGPU_InvalidateDataCache(output, bytes);
+    ctx->frame_write_idx ^= 1;
+    ctx->frame_ready = true;
+    return true;
+}
+
 static bool mvd_submit_nal(mvd_ctx_t *ctx, const uint8_t *nal, size_t length,
-                           bool *decoded, Result *ret_out)
+                           bool *decoded)
 {
     if (!length || (nal[0] & 0x80)) return false;
     unsigned type = nal[0] & 31;
@@ -166,15 +224,14 @@ static bool mvd_submit_nal(mvd_ctx_t *ctx, const uint8_t *nal, size_t length,
     memcpy(ctx->nal_buf + 3, nal, length);
     GSPGPU_FlushDataCache(ctx->nal_buf, length + 3);
     void *mapped = osConvertOldLINEARMemToNew(ctx->nal_buf);
-    if (!mapped || ((uintptr_t)mapped & 0xfff)) return false;
+    if (mapped != ctx->nal_buf || ((uintptr_t)mapped & 0xfff)) return false;
 
-    Result ret = mvdstdProcessVideoFrame(mapped, length + 3, 0, NULL);
-    static unsigned unit_logs;
-    if (unit_logs++ < 12 || !MVD_CHECKNALUPROC_SUCCESS(ret))
-        log_write("MVD unit=%u bytes=%lu status=%08lx", type, (unsigned long)length, (unsigned long)ret);
-    if (!MVD_CHECKNALUPROC_SUCCESS(ret)) { *ret_out = ret; return false; }
-    if (ret == MVD_STATUS_FRAMEREADY) *decoded = true;
-    *ret_out = ret;
+    Result ret = process_nal(mapped, length + 3, type);
+    if (!MVD_CHECKNALUPROC_SUCCESS(ret)) return false;
+    if (ret == MVD_STATUS_FRAMEREADY) {
+        if (!render_ready_frame(ctx)) return false;
+        *decoded = true;
+    }
     return true;
 }
 
@@ -213,18 +270,6 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
         if (check_off != size) return false;
     }
 
-    /* Set output config for the current write buffer */
-    MVDSTD_Config config;
-    mvdstdGenerateDefaultConfig(&config,
-                                 ctx->width, ctx->height,
-                                 ctx->width, ctx->height,
-                                 NULL, NULL, NULL);
-    config.physaddr_outdata0 = osConvertVirtToPhys(ctx->frame_buf[ctx->frame_write_idx]);
-
-    /* Do not configure/render before SPS/PPS and a ready frame. The MVD
-     * system process treats an early rendering request as a fatal state. */
-
-    Result ret = MVD_STATUS_PARAMSET;
     bool decoded = false;
 
     if (is_annexb) {
@@ -243,7 +288,7 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
                 ++end;
             }
             if (end <= start + prefix) return false;
-            if (!mvd_submit_nal(ctx, data + start + prefix, (size_t)(end - start - prefix), &decoded, &ret))
+            if (!mvd_submit_nal(ctx, data + start + prefix, (size_t)(end - start - prefix), &decoded))
                 return false;
             start = end;
         }
@@ -255,45 +300,13 @@ bool mvd_decode_packet(mvd_ctx_t *ctx, const uint8_t *data, int size)
                                 ((uint32_t)data[src_off + 2] << 8) |
                                 (uint32_t)data[src_off + 3];
             src_off += 4;
-            if (!mvd_submit_nal(ctx, data + src_off, nal_size, &decoded, &ret))
+            if (!mvd_submit_nal(ctx, data + src_off, nal_size, &decoded))
                 return false;
             src_off += (int)nal_size;
         }
     }
 
-    static int frame_count = 0;
-    frame_count++;
-    if (frame_count <= 5 || frame_count % 100 == 0) {
-        log_write("MVD: ProcessNAL ret=0x%08lX nal_size=%d frame#%d",
-                  (unsigned long)ret, size, frame_count);
-    }
-
-    if (R_FAILED(ret) && !MVD_CHECKNALUPROC_SUCCESS(ret)) {
-        log_write("MVD: ProcessNAL FAILED ret=0x%08lX", (unsigned long)ret);
-        return false;
-    }
-
-    /* Try to render the decoded frame */
-    if (decoded) {
-        size_t frame_bytes = (size_t)ctx->width * ctx->height * 2;
-        GSPGPU_FlushDataCache(ctx->frame_buf[ctx->frame_write_idx], frame_bytes);
-        for (int tries = 0; tries < 50; tries++) {
-            ret = mvdstdRenderVideoFrame(&config, true);
-            if (ret != MVD_STATUS_BUSY) break;
-            svcSleepThread(500000LL);
-        }
-        if (frame_count <= 5 || frame_count % 100 == 0) {
-            log_write("MVD: RenderFrame ret=0x%08lX", (unsigned long)ret);
-        }
-        if (ret == MVD_STATUS_OK) {
-            GSPGPU_InvalidateDataCache(ctx->frame_buf[ctx->frame_write_idx], frame_bytes);
-            ctx->frame_write_idx ^= 1; /* swap double buffer */
-            ctx->frame_ready = true;
-            return true;
-        }
-    }
-
-    return false;
+    return decoded;
 }
 
 uint8_t *mvd_get_frame(mvd_ctx_t *ctx)

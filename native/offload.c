@@ -30,7 +30,7 @@
 #define STBI_MAX_DIMENSIONS 512
 #include "util/stb_image.h"
 
-#define APP_VERSION "0.3.6"
+#define APP_VERSION "0.3.7"
 #define CONFIG_DIR "sdmc:/3ds/Jellyfin3DS"
 #define CONFIG_PATH CONFIG_DIR "/config.json"
 #define CONFIG_PART CONFIG_DIR "/config.json.part"
@@ -580,11 +580,11 @@ static bool play_command(const cJSON *command, cJSON **result, char *error,
     "&PlaySessionId=%s&VideoCodec=h264&AudioCodec=aac&Container=ts"
     "&TranscodingContainer=ts&TranscodingProtocol=http&MaxWidth=%d&MaxHeight=%d"
     "&MaxFramerate=%d&VideoBitRate=%d&AudioBitRate=64000&MaxAudioChannels=2"
-    "&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2"
+    "&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2%s"
     "&StartTimeTicks=%lld",
     id, config.user_id, config.device_id, id, playing_session,
     stream.width, stream.height, stream.fps, stream.video_kbps * 1000,
-    (long long)seek_ticks);
+    mvd ? "&AllowVideoStreamCopy=false" : "", (long long)seek_ticks);
   char url[SERVER_MAX + sizeof suffix];
   if (written <= 0 || (size_t)written >= sizeof suffix ||
       !make_url(url, sizeof url, config.server, suffix) ||
